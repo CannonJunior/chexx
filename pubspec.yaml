@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flame: ^1.17.0
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

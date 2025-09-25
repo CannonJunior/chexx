@@ -7,7 +7,7 @@ import '../models/game_board.dart';
 import '../systems/chexx_game.dart';
 
 /// Visual component for rendering a hexagonal tile
-class HexTileComponent extends Component with HasGameRef<ChexxGame>, TapCallbacks {
+class HexTileComponent extends PositionComponent with HasGameRef<ChexxGame>, TapCallbacks {
   final HexTile tile;
   final double hexSize;
 
@@ -18,7 +18,7 @@ class HexTileComponent extends Component with HasGameRef<ChexxGame>, TapCallback
   HexTileComponent({
     required this.tile,
     required this.hexSize,
-  });
+  }) : super(size: Vector2.all(hexSize * 2));
 
   @override
   Future<void> onLoad() async {
@@ -27,9 +27,6 @@ class HexTileComponent extends Component with HasGameRef<ChexxGame>, TapCallback
     // Set position based on hex coordinates
     final (x, y) = tile.coordinate.toPixel(hexSize);
     position = Vector2(x, y);
-
-    // Set size for tap detection
-    size = Vector2.all(hexSize * 2);
 
     // Initialize paints
     _fillPaint = Paint()..style = PaintingStyle.fill;

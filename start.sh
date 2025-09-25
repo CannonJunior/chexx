@@ -126,42 +126,88 @@ flutter doctor || print_warning "Flutter doctor found some issues, but continuin
 # Choose platform
 echo ""
 echo "🚀 Choose launch platform:"
-echo "1) Web (Firefox) - Recommended for development"
-echo "2) Desktop (Linux)"
-echo "3) Android (if device/emulator connected)"
-echo "4) Check available devices"
+echo "1) Web (Firefox) - Flutter dev server"
+echo "2) Web (Firefox) - Python HTTP server (if option 1 fails)"
+echo "3) Desktop (Linux)"
+echo "4) Android (if device/emulator connected)"
+echo "5) Check available devices"
 
-read -p "Enter choice (1-4) [default: 1]: " choice
+read -p "Enter choice (1-5) [default: 1]: " choice
 choice=${choice:-1}
 
 case $choice in
     1)
         print_status "Launching CHEXX on Web (Firefox)..."
+
+        # First, enable web support and clean any previous builds
+        print_status "Enabling Flutter web support..."
+        flutter config --enable-web
+
+        print_status "Cleaning previous builds..."
+        flutter clean
+        flutter pub get
+
+        # Build web version first to ensure all assets are compiled
+        print_status "Building web version..."
+        if ! flutter build web --web-renderer canvaskit; then
+            print_error "Web build failed. Trying with HTML renderer..."
+            if ! flutter build web --web-renderer html; then
+                print_error "Web build failed with both renderers."
+                exit 1
+            fi
+        fi
+
+        print_success "Web build completed successfully!"
+
         if command -v firefox &> /dev/null; then
-            # Set Firefox as the default browser for Flutter web
-            export CHROME_EXECUTABLE=$(which firefox)
             print_status "Starting Flutter web server for Firefox..."
-            flutter run -d web-server --web-port=9090 --web-hostname=localhost &
-            sleep 3
+
+            # Start the server in the background
+            flutter run -d web-server --web-port=9090 --web-hostname=localhost --release &
+            SERVER_PID=$!
+
+            # Wait for server to start
+            print_status "Waiting for web server to initialize..."
+            sleep 5
+
+            # Check if server is responding
+            for i in {1..10}; do
+                if curl -s http://localhost:9090 > /dev/null 2>&1; then
+                    print_success "Web server is ready!"
+                    break
+                elif [[ $i -eq 10 ]]; then
+                    print_error "Web server failed to start properly"
+                    kill $SERVER_PID 2>/dev/null
+                    exit 1
+                fi
+                sleep 2
+            done
+
             print_success "Opening Firefox to http://localhost:9090"
             firefox http://localhost:9090 &
-            wait
+
+            # Keep the server running
+            wait $SERVER_PID
         else
             print_warning "Firefox not found, using default web browser"
-            flutter run -d web-server --web-port=9090 --web-hostname=localhost
+            flutter run -d web-server --web-port=9090 --web-hostname=localhost --release
         fi
         ;;
     2)
+        print_status "Launching CHEXX with Python HTTP server..."
+        ./serve_web.sh
+        ;;
+    3)
         print_status "Launching CHEXX on Desktop (Linux)..."
         # Enable desktop support
         flutter config --enable-linux-desktop
         flutter run -d linux
         ;;
-    3)
+    4)
         print_status "Launching CHEXX on Android..."
         flutter run -d android
         ;;
-    4)
+    5)
         print_status "Available devices:"
         flutter devices
         echo ""
