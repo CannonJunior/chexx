@@ -24,11 +24,23 @@ CHEXX is a turn-based strategy game played on a 61-hexagon board where two playe
 ```
 
 This script will:
-- Install Flutter if needed
+- Install Flutter if needed and add it to PATH
 - Set up dependencies
 - Launch the game on your preferred platform
 
-### Option 2: Manual Setup
+### Option 2: Setup Flutter PATH Only
+
+If you already have Flutter installed but need to add it to PATH:
+
+```bash
+# Option A: Source the setup script (adds to current session)
+source ./setup_flutter_path.sh
+
+# Option B: Run the main script (auto-detects and configures)
+./start.sh
+```
+
+### Option 3: Manual Setup
 
 1. **Install Flutter** (if not already installed):
    ```bash
@@ -54,7 +66,7 @@ This script will:
 3. **Run the Game**:
    ```bash
    # Web (recommended for development)
-   flutter run -d chrome --web-port=9090
+   flutter run -d web-server --web-port=9090
 
    # Desktop Linux
    flutter config --enable-linux-desktop

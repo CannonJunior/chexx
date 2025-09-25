@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../systems/chexx_game.dart';
 import '../models/game_state.dart';
+import '../models/game_unit.dart';
 
 /// Game UI overlay with turn timer, player info, and controls
 class GameUI extends StatefulWidget {

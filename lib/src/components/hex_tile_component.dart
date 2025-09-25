@@ -7,7 +7,7 @@ import '../models/game_board.dart';
 import '../systems/chexx_game.dart';
 
 /// Visual component for rendering a hexagonal tile
-class HexTileComponent extends PolygonComponent with HasGameRef<ChexxGame>, TapCallbacks {
+class HexTileComponent extends Component with HasGameRef<ChexxGame>, TapCallbacks {
   final HexTile tile;
   final double hexSize;
 
@@ -18,22 +18,18 @@ class HexTileComponent extends PolygonComponent with HasGameRef<ChexxGame>, TapC
   HexTileComponent({
     required this.tile,
     required this.hexSize,
-  }) : super([]);
+  });
 
   @override
   Future<void> onLoad() async {
     super.onLoad();
 
-    // Create hexagon vertices
-    final vertices = _createHexagonVertices();
-
-    // Set polygon properties
-    vertices.clear();
-    vertices.addAll(_createHexagonVertices());
-
     // Set position based on hex coordinates
     final (x, y) = tile.coordinate.toPixel(hexSize);
     position = Vector2(x, y);
+
+    // Set size for tap detection
+    size = Vector2.all(hexSize * 2);
 
     // Initialize paints
     _fillPaint = Paint()..style = PaintingStyle.fill;

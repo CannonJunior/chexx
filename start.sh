@@ -32,10 +32,22 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if Flutter is installed
-if ! command -v flutter &> /dev/null; then
-    print_error "Flutter is not installed or not in PATH"
-    print_status "Installing Flutter..."
+# Check if Flutter is installed or available in common locations
+FLUTTER_PATH=""
+
+if command -v flutter &> /dev/null; then
+    print_success "Flutter is already available in PATH"
+    FLUTTER_PATH=$(which flutter)
+elif [[ -f "$HOME/development/flutter/bin/flutter" ]]; then
+    print_status "Found Flutter in ~/development/flutter, adding to PATH..."
+    export PATH="$PATH:$HOME/development/flutter/bin"
+    FLUTTER_PATH="$HOME/development/flutter/bin/flutter"
+elif [[ -f "/opt/flutter/bin/flutter" ]]; then
+    print_status "Found Flutter in /opt/flutter, adding to PATH..."
+    export PATH="$PATH:/opt/flutter/bin"
+    FLUTTER_PATH="/opt/flutter/bin/flutter"
+else
+    print_warning "Flutter not found, installing..."
 
     # Download and install Flutter
     cd /tmp
@@ -58,19 +70,30 @@ if ! command -v flutter &> /dev/null; then
     fi
     mv flutter ~/development/
 
-    # Add to PATH for this session
-    export PATH="$PATH:$HOME/development/flutter/bin"
-
-    # Add to bashrc for future sessions
-    if ! grep -q "flutter/bin" ~/.bashrc; then
-        echo 'export PATH="$PATH:$HOME/development/flutter/bin"' >> ~/.bashrc
-        print_status "Added Flutter to ~/.bashrc"
-    fi
-
+    FLUTTER_PATH="$HOME/development/flutter/bin/flutter"
     cd - > /dev/null
-    print_success "Flutter installed successfully"
+    print_success "Flutter installed to ~/development/flutter"
+fi
+
+# Ensure Flutter is in PATH for this session
+export PATH="$PATH:$HOME/development/flutter/bin:/opt/flutter/bin"
+
+# Add to shell profiles for future sessions
+FLUTTER_PATH_EXPORT='export PATH="$PATH:$HOME/development/flutter/bin:/opt/flutter/bin"'
+
+for profile in ~/.bashrc ~/.zshrc ~/.profile; do
+    if [[ -f "$profile" ]] && ! grep -q "flutter/bin" "$profile"; then
+        echo "$FLUTTER_PATH_EXPORT" >> "$profile"
+        print_status "Added Flutter to $profile"
+    fi
+done
+
+# Verify Flutter is now available
+if command -v flutter &> /dev/null; then
+    print_success "✅ Flutter is now available in PATH: $(which flutter)"
 else
-    print_success "Flutter is already installed"
+    print_error "❌ Failed to add Flutter to PATH"
+    exit 1
 fi
 
 # Verify Flutter installation
@@ -117,7 +140,12 @@ case $choice in
         if command -v firefox &> /dev/null; then
             # Set Firefox as the default browser for Flutter web
             export CHROME_EXECUTABLE=$(which firefox)
-            flutter run -d chrome --web-port=9090 --web-hostname=localhost
+            print_status "Starting Flutter web server for Firefox..."
+            flutter run -d web-server --web-port=9090 --web-hostname=localhost &
+            sleep 3
+            print_success "Opening Firefox to http://localhost:9090"
+            firefox http://localhost:9090 &
+            wait
         else
             print_warning "Firefox not found, using default web browser"
             flutter run -d web-server --web-port=9090 --web-hostname=localhost
