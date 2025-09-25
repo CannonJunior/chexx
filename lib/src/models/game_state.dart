@@ -1,6 +1,7 @@
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
+import 'meta_ability.dart';
 
 enum GamePhase { setup, playing, gameOver }
 
@@ -26,6 +27,12 @@ class GameState {
   List<HexCoordinate> availableMoves;
   List<HexCoordinate> availableAttacks;
 
+  // Meta abilities system
+  List<MetaHex> metaHexes;
+  MetaHex? selectedMetaHex;
+  List<ActiveMetaEffect> activeMetaEffects;
+  Map<MetaAbilityType, List<MetaAbility>> metaAbilityDefinitions;
+
   // Rewards system
   int player1Rewards;
   int player2Rewards;
@@ -41,6 +48,9 @@ class GameState {
         isPaused = false,
         availableMoves = [],
         availableAttacks = [],
+        metaHexes = [],
+        activeMetaEffects = [],
+        metaAbilityDefinitions = {},
         player1Rewards = 0,
         player2Rewards = 0;
 

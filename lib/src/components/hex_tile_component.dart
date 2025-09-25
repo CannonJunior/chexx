@@ -7,7 +7,8 @@ import '../models/game_board.dart';
 import '../systems/chexx_game.dart';
 
 /// Visual component for rendering a hexagonal tile
-class HexTileComponent extends PositionComponent with HasGameRef<ChexxGame>, TapCallbacks {
+class HexTileComponent extends PositionComponent
+    with HasGameRef<ChexxGame>, TapCallbacks, HasPaint {
   final HexTile tile;
   final double hexSize;
 
@@ -65,7 +66,7 @@ class HexTileComponent extends PositionComponent with HasGameRef<ChexxGame>, Tap
   @override
   bool onTapDown(TapDownEvent event) {
     // Notify game of tile tap
-    (gameRef as ChexxGame).onTileTapped(tile.coordinate);
+    gameRef.onTileTapped(tile.coordinate);
     return true;
   }
 

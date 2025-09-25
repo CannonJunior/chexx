@@ -97,7 +97,7 @@ class UnitComponent extends CircleComponent with HasGameRef<ChexxGame>, TapCallb
     if (!unit.isAlive) return false;
 
     // Notify game of unit tap
-    (gameRef as ChexxGame).onUnitTapped(unit);
+    gameRef.onUnitTapped(unit);
     return true;
   }
 

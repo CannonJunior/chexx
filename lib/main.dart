@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'src/screens/chexx_game_screen.dart';
 
 void main() {
-  runApp(const ChexxTestApp());
+  runApp(const ChexxApp());
 }
 
-class ChexxTestApp extends StatelessWidget {
-  const ChexxTestApp({super.key});
+class ChexxApp extends StatelessWidget {
+  const ChexxApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -16,14 +18,14 @@ class ChexxTestApp extends StatelessWidget {
         visualDensity: VisualDensity.adaptivePlatformDensity,
         brightness: Brightness.dark,
       ),
-      home: const TestGameScreen(),
+      home: const MainMenuScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class TestGameScreen extends StatelessWidget {
-  const TestGameScreen({super.key});
+class MainMenuScreen extends StatelessWidget {
+  const MainMenuScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -41,136 +43,247 @@ class TestGameScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Game title
-                Text(
-                  'CHEXX',
-                  style: TextStyle(
-                    fontSize: 64,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 8.0,
-                    shadows: [
-                      Shadow(
-                        offset: const Offset(2, 2),
-                        blurRadius: 4,
-                        color: Colors.black.withOpacity(0.7),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Game title
+              const Spacer(),
+
+              Text(
+                'CHEXX',
+                style: TextStyle(
+                  fontSize: 64,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 8.0,
+                  shadows: [
+                    Shadow(
+                      offset: const Offset(2, 2),
+                      blurRadius: 4,
+                      color: Colors.black.withOpacity(0.7),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Text(
+                'Hexagonal Turn-Based Strategy',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.white70,
+                  letterSpacing: 2.0,
+                ),
+              ),
+
+              const Spacer(),
+
+              // Game info
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 32),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Game Features:',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                    ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildFeatureItem('✅ 61 hexagonal battlefield'),
+                    _buildFeatureItem('✅ 3 unique major unit types'),
+                    _buildFeatureItem('✅ 6-second turn timer'),
+                    _buildFeatureItem('✅ Meta hexagon special abilities'),
+                    _buildFeatureItem('✅ Strategic positioning gameplay'),
+                    _buildFeatureItem('✅ Custom Flutter game engine'),
+                  ],
+                ),
+              ),
+
+              const Spacer(),
+
+              // Play button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: () => _startGame(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 8,
+                    ),
+                    child: const Text(
+                      'START GAME',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 16),
+              const SizedBox(height: 32),
 
-                Text(
-                  'Hexagonal Turn-Based Strategy',
+              // Instructions
+              TextButton(
+                onPressed: () => _showInstructions(context),
+                child: const Text(
+                  'How to Play',
                   style: TextStyle(
-                    fontSize: 18,
                     color: Colors.white70,
-                    letterSpacing: 2.0,
+                    fontSize: 16,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 32),
-
-                // Test status
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  margin: const EdgeInsets.symmetric(horizontal: 32),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.green),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 48,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Web Build Successful!',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Flutter web compilation working correctly.\nFull game implementation can now be deployed.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Info card
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 32),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Test Status:',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      _buildStatusItem('✅ Flutter web setup', 'Complete'),
-                      _buildStatusItem('✅ Firefox integration', 'Ready'),
-                      _buildStatusItem('✅ MIME type fix', 'Applied'),
-                      _buildStatusItem('✅ Port 9090 config', 'Configured'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildStatusItem(String label, String status) {
+  Widget _buildFeatureItem(String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
+          Icon(
+            Icons.hexagon,
+            color: Colors.blue.shade400,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _startGame(BuildContext context) {
+    // Set landscape orientation for better gameplay
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const ChexxGameScreen(),
+      ),
+    ).then((_) {
+      // Reset orientation when returning to menu
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    });
+  }
+
+  void _showInstructions(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey.shade800,
+        title: const Text(
+          'How to Play CHEXX',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildInstructionItem(
+                '1. Objective',
+                'Eliminate all enemy units to win the game.',
+              ),
+              _buildInstructionItem(
+                '2. Turn System',
+                'Each turn lasts 6 seconds. Click/tap to move and attack.',
+              ),
+              _buildInstructionItem(
+                '3. Unit Types',
+                'Minor (M): Basic units with 1 HP\nScout (S): Long range attacks\nKnight (K): High damage but short range\nGuardian (G): Defensive unit',
+              ),
+              _buildInstructionItem(
+                '4. Meta Hexagons',
+                'Purple hexagons provide special abilities when occupied.',
+              ),
+              _buildInstructionItem(
+                '5. Rewards',
+                'Faster decisions earn more reward points (0-61).',
+              ),
+              _buildInstructionItem(
+                '6. Controls',
+                'Click your units to select, then click where to move or attack.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Got It!',
+              style: TextStyle(color: Colors.blue.shade400),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionItem(String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            status,
+            title,
             style: const TextStyle(
-              color: Colors.green,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
             ),
           ),
         ],
