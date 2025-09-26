@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:html' as html;
+import 'dart:convert';
 import 'src/screens/chexx_game_screen.dart';
+import 'src/screens/scenario_builder_screen.dart';
 
 void main() {
   runApp(const ChexxApp());
@@ -140,6 +143,72 @@ class MainMenuScreen extends StatelessWidget {
                 ),
               ),
 
+              const SizedBox(height: 16),
+
+              // Button row for Scenario Builder and Load Scenario
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Row(
+                  children: [
+                    // Scenario Builder button
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () => _openScenarioBuilder(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 4,
+                          ),
+                          child: const Text(
+                            'SCENARIO\nBUILDER',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 16),
+
+                    // Load Scenario button
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () => _loadScenario(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 4,
+                          ),
+                          child: const Text(
+                            'LOAD\nSCENARIO',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 32),
 
               // Instructions
@@ -208,6 +277,35 @@ class MainMenuScreen extends StatelessWidget {
         DeviceOrientation.landscapeRight,
       ]);
     });
+  }
+
+  void _openScenarioBuilder(BuildContext context) {
+    // Set landscape orientation for better editing
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const ScenarioBuilderScreen(),
+      ),
+    ).then((_) {
+      // Reset orientation when returning to menu
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    });
+  }
+
+  void _loadScenario(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const ScenarioLoaderDialog(),
+    );
   }
 
   void _showInstructions(BuildContext context) {
@@ -289,5 +387,269 @@ class MainMenuScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Dialog for loading scenario files
+class ScenarioLoaderDialog extends StatefulWidget {
+  const ScenarioLoaderDialog({super.key});
+
+  @override
+  State<ScenarioLoaderDialog> createState() => _ScenarioLoaderDialogState();
+}
+
+class _ScenarioLoaderDialogState extends State<ScenarioLoaderDialog> {
+  Map<String, dynamic>? loadedScenario;
+  String? scenarioName;
+  String? errorMessage;
+  bool isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.grey.shade800,
+      title: const Text(
+        'Load Custom Scenario',
+        style: TextStyle(color: Colors.white),
+      ),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select a scenario file created with the Scenario Builder:',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+
+            // File selection button
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: isLoading ? null : _selectFile,
+                icon: const Icon(Icons.folder_open),
+                label: Text(isLoading ? 'Loading...' : 'Choose Scenario File'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Scenario info display
+            if (loadedScenario != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade900.withOpacity(0.3),
+                  border: Border.all(color: Colors.green.shade600),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green.shade400, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Scenario Loaded Successfully!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Name: ${scenarioName ?? 'Custom Scenario'}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Units: ${(loadedScenario!['unit_placements'] as List?)?.length ?? 0}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Meta Hexes: ${(loadedScenario!['meta_hex_positions'] as List?)?.length ?? 0}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade900.withOpacity(0.3),
+                  border: Border.all(color: Colors.red.shade600),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.error, color: Colors.red.shade400, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Error Loading Scenario',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade900.withOpacity(0.3),
+                  border: Border.all(color: Colors.blue.shade600),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No scenario file selected',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Choose a .json file created by the Scenario Builder',
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(
+            'Cancel',
+            style: TextStyle(color: Colors.grey.shade400),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: loadedScenario != null ? () => _startGameWithScenario(context) : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green.shade600,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Start Game'),
+        ),
+      ],
+    );
+  }
+
+  void _selectFile() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      final input = html.FileUploadInputElement()
+        ..accept = '.json'
+        ..click();
+
+      await input.onChange.first;
+
+      if (input.files!.isNotEmpty) {
+        final file = input.files!.first;
+        final reader = html.FileReader();
+        reader.readAsText(file);
+
+        await reader.onLoad.first;
+
+        final content = reader.result as String;
+        final Map<String, dynamic> scenario = json.decode(content);
+
+        // Validate scenario structure
+        _validateScenario(scenario);
+
+        setState(() {
+          loadedScenario = scenario;
+          scenarioName = scenario['scenario_name'] as String?;
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Failed to load scenario: ${e.toString()}';
+        isLoading = false;
+      });
+    }
+  }
+
+  void _validateScenario(Map<String, dynamic> scenario) {
+    // Check required fields
+    if (!scenario.containsKey('unit_placements')) {
+      throw Exception('Missing unit_placements in scenario file');
+    }
+    if (!scenario.containsKey('meta_hex_positions')) {
+      throw Exception('Missing meta_hex_positions in scenario file');
+    }
+    if (!scenario.containsKey('board')) {
+      throw Exception('Missing board configuration in scenario file');
+    }
+
+    // Validate unit placements structure
+    final unitPlacements = scenario['unit_placements'] as List;
+    for (final placement in unitPlacements) {
+      final placementMap = placement as Map<String, dynamic>;
+      if (!placementMap.containsKey('template') || !placementMap.containsKey('position')) {
+        throw Exception('Invalid unit placement structure');
+      }
+    }
+  }
+
+  void _startGameWithScenario(BuildContext context) {
+    if (loadedScenario == null) return;
+
+    // Set landscape orientation for gameplay
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    Navigator.of(context).pop(); // Close dialog
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ChexxGameScreen(scenarioConfig: loadedScenario),
+      ),
+    ).then((_) {
+      // Reset orientation when returning to menu
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    });
   }
 }

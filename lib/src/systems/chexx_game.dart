@@ -11,7 +11,7 @@ import '../components/unit_component.dart';
 /// Main Flame game engine for CHEXX
 class ChexxGame extends FlameGame with ChangeNotifier {
   late GameState gameState;
-  final double hexSize = 25.0;
+  final double hexSize = 50.0;
 
   final Map<HexCoordinate, HexTileComponent> tileComponents = {};
   final Map<String, UnitComponent> unitComponents = {};

@@ -122,6 +122,28 @@ class HexCoordinate {
     HexCoordinate(0, 1, -1),  // Southeast
   ];
 
+  /// Keyboard direction mappings (clock positions)
+  /// W: 12 o'clock, E: 2 o'clock, D: 4 o'clock, S: 6 o'clock, A: 8 o'clock, Q: 10 o'clock
+  static const Map<String, HexCoordinate> keyboardDirections = {
+    'w': HexCoordinate(0, -1, 1),   // 12 o'clock (North/Northwest)
+    'e': HexCoordinate(1, -1, 0),   // 2 o'clock (Northeast)
+    'd': HexCoordinate(1, 0, -1),   // 4 o'clock (East/Southeast)
+    's': HexCoordinate(0, 1, -1),   // 6 o'clock (South/Southeast)
+    'a': HexCoordinate(-1, 1, 0),   // 8 o'clock (Southwest)
+    'q': HexCoordinate(-1, 0, 1),   // 10 o'clock (West/Northwest)
+  };
+
+  /// Get neighbor in specific keyboard direction
+  HexCoordinate? getNeighborInDirection(String key) {
+    final direction = keyboardDirections[key.toLowerCase()];
+    return direction != null ? this + direction : null;
+  }
+
+  /// Check if a key represents a valid movement direction
+  static bool isValidMovementKey(String key) {
+    return keyboardDirections.containsKey(key.toLowerCase());
+  }
+
   @override
   bool operator ==(Object other) {
     return other is HexCoordinate &&

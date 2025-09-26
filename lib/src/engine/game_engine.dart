@@ -5,11 +5,12 @@ import '../models/hex_coordinate.dart';
 import '../models/game_state.dart';
 import '../models/game_unit.dart';
 import '../models/game_board.dart';
+import '../models/meta_ability.dart';
 
 /// Custom lightweight game engine for CHEXX using Flutter's CustomPainter
 class ChexxGameEngine extends ChangeNotifier {
   late GameState gameState;
-  final double hexSize = 25.0;
+  final double hexSize = 50.0;
 
   // Input handling
   HexCoordinate? _hoveredHex;
@@ -18,18 +19,34 @@ class ChexxGameEngine extends ChangeNotifier {
   // Animation
   Timer? _gameTimer;
 
-  ChexxGameEngine() {
+  // Performance caching
+  final Map<HexCoordinate, List<Offset>> _hexVerticesCache = {};
+  Size? _lastCanvasSize;
+
+  ChexxGameEngine({Map<String, dynamic>? scenarioConfig}) {
     gameState = GameState();
-    gameState.initializeGame();
+    if (scenarioConfig != null) {
+      gameState.initializeFromScenario(scenarioConfig);
+    } else {
+      gameState.initializeGame();
+    }
     _startGameLoop();
   }
 
   /// Start the game loop timer
   void _startGameLoop() {
-    _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      // Update game timer
-      gameState.updateTimer(0.016);
-      notifyListeners();
+    _gameTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      // Update game timer only during active gameplay
+      if (gameState.gamePhase == GamePhase.playing && !gameState.isPaused) {
+        final oldTimeRemaining = gameState.turnTimeRemaining;
+        gameState.updateTimer(0.1);
+
+        // Only notify if time actually changed significantly or game ended
+        if ((gameState.turnTimeRemaining - oldTimeRemaining).abs() > 0.05 ||
+            gameState.gamePhase == GamePhase.gameOver) {
+          notifyListeners();
+        }
+      }
     });
   }
 
@@ -39,11 +56,23 @@ class ChexxGameEngine extends ChangeNotifier {
 
     if (hexCoord != null && gameState.board.isValidCoordinate(hexCoord)) {
       final unit = gameState.board.getUnitAt(hexCoord, gameState.units);
+      final metaHex = gameState.getMetaHexAt(hexCoord);
 
+      // Priority 1: Select own unit (even if on Meta hex)
       if (unit != null && unit.owner == gameState.currentPlayer) {
-        // Select own unit
         selectUnit(unit);
-      } else if (gameState.selectedUnit != null) {
+        // Deselect Meta hex when selecting a unit
+        if (gameState.selectedMetaHex != null) {
+          gameState.selectedMetaHex = null;
+        }
+      }
+      // Priority 2: Select Meta hex (only if no unit present)
+      else if (metaHex != null) {
+        gameState.selectMetaHex(metaHex);
+        gameState.deselectUnit();
+      }
+      // Priority 3: Execute actions with selected unit/Meta hex
+      else if (gameState.selectedUnit != null) {
         if (gameState.availableMoves.contains(hexCoord)) {
           // Move to empty hex
           gameState.moveUnit(hexCoord);
@@ -54,6 +83,17 @@ class ChexxGameEngine extends ChangeNotifier {
           // Deselect
           gameState.deselectUnit();
         }
+      }
+      // Priority 4: Use Meta ability if Meta hex is selected
+      else if (gameState.selectedMetaHex != null) {
+        // For now, use heal ability as default (can be extended later)
+        if (unit != null && unit.owner == gameState.currentPlayer) {
+          gameState.useMetaAbility(MetaAbilityType.heal, hexCoord);
+        } else {
+          // Try spawn if targeting empty hex
+          gameState.useMetaAbility(MetaAbilityType.spawn, hexCoord);
+        }
+        gameState.selectedMetaHex = null;
       }
 
       notifyListeners();
@@ -98,8 +138,20 @@ class ChexxGameEngine extends ChangeNotifier {
     return Offset(centerX + x, centerY + y);
   }
 
-  /// Get hex vertices for rendering
+  /// Get hex vertices for rendering (cached for performance)
   List<Offset> getHexVertices(HexCoordinate hex, Size canvasSize) {
+    // Clear cache if canvas size changed
+    if (_lastCanvasSize != canvasSize) {
+      _hexVerticesCache.clear();
+      _lastCanvasSize = canvasSize;
+    }
+
+    // Return cached vertices if available
+    if (_hexVerticesCache.containsKey(hex)) {
+      return _hexVerticesCache[hex]!;
+    }
+
+    // Calculate and cache vertices
     final center = hexToScreen(hex, canvasSize);
     final vertices = <Offset>[];
 
@@ -110,6 +162,7 @@ class ChexxGameEngine extends ChangeNotifier {
       vertices.add(Offset(x, y));
     }
 
+    _hexVerticesCache[hex] = vertices;
     return vertices;
   }
 
@@ -137,6 +190,13 @@ class ChexxGameEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Handle keyboard input for movement
+  void handleKeyboardInput(String key) {
+    if (gameState.handleKeyboardMovement(key)) {
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     _gameTimer?.cancel();
@@ -148,6 +208,45 @@ class ChexxGameEngine extends ChangeNotifier {
 class ChexxGamePainter extends CustomPainter {
   final ChexxGameEngine engine;
   final HexCoordinate? hoveredHex;
+
+  // Cached paint objects for performance
+  static final Paint _normalPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..color = Colors.lightGreen.shade100;
+
+  static final Paint _metaPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..color = Colors.purple.shade200;
+
+  static final Paint _strokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.0
+    ..color = Colors.black54;
+
+  static final Paint _highlightPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 3.0
+    ..color = Colors.yellow;
+
+  static final Paint _hoverPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.0
+    ..color = Colors.white.withOpacity(0.5);
+
+  static final Paint _metaSelectionPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 4.0
+    ..color = Colors.purple.shade400;
+
+  static final Paint _metaPlayer1ControlPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.0
+    ..color = Colors.blue.shade300;
+
+  static final Paint _metaPlayer2ControlPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.0
+    ..color = Colors.red.shade300;
 
   ChexxGamePainter(this.engine, this.hoveredHex);
 
@@ -170,28 +269,7 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   void _drawHexTiles(Canvas canvas, Size size) {
-    final normalPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.lightGreen.shade100;
-
-    final metaPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.purple.shade200;
-
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = Colors.black54;
-
-    final highlightPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..color = Colors.yellow;
-
-    final hoverPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = Colors.white.withOpacity(0.5);
+    // Use cached paint objects for better performance
 
     for (final tile in engine.gameState.board.allTiles) {
       final vertices = engine.getHexVertices(tile.coordinate, size);
@@ -204,20 +282,37 @@ class ChexxGamePainter extends CustomPainter {
         }
         path.close();
 
+        // Check if this is a Meta hex
+        final metaHex = engine.gameState.getMetaHexAt(tile.coordinate);
+        final isMetaHex = metaHex != null;
+
         // Fill hex
-        canvas.drawPath(path, tile.isMetaHex ? metaPaint : normalPaint);
+        canvas.drawPath(path, isMetaHex ? _metaPaint : _normalPaint);
 
         // Draw border
-        canvas.drawPath(path, strokePaint);
+        canvas.drawPath(path, _strokePaint);
 
         // Draw highlights
         if (tile.isHighlighted) {
-          canvas.drawPath(path, highlightPaint);
+          canvas.drawPath(path, _highlightPaint);
         }
 
         // Draw hover
         if (hoveredHex == tile.coordinate) {
-          canvas.drawPath(path, hoverPaint);
+          canvas.drawPath(path, _hoverPaint);
+        }
+
+        // Draw Meta hex selection indicator
+        if (metaHex != null && engine.gameState.selectedMetaHex == metaHex) {
+          canvas.drawPath(path, _metaSelectionPaint);
+        }
+
+        // Draw Meta hex control indicator
+        if (metaHex != null && metaHex.controlledBy != null) {
+          final controlPaint = metaHex.controlledBy == Player.player1
+              ? _metaPlayer1ControlPaint
+              : _metaPlayer2ControlPaint;
+          canvas.drawPath(path, controlPaint);
         }
       }
     }
@@ -282,6 +377,16 @@ class ChexxGamePainter extends CustomPainter {
     if (unit.currentHealth < unit.maxHealth) {
       _drawHealthBar(canvas, center, unit);
     }
+
+    // Draw level indicator if above level 1
+    if (unit.level > 1) {
+      _drawLevelIndicator(canvas, center, unit);
+    }
+
+    // Draw experience progress bar
+    if (unit.experience > 0) {
+      _drawExperienceBar(canvas, center, unit);
+    }
   }
 
   void _drawHealthBar(Canvas canvas, Offset center, GameUnit unit) {
@@ -302,6 +407,71 @@ class ChexxGamePainter extends CustomPainter {
     canvas.drawRect(
       Rect.fromLTWH(center.dx - barWidth / 2, barY, healthWidth, barHeight),
       Paint()..color = Colors.green.shade600,
+    );
+  }
+
+  void _drawLevelIndicator(Canvas canvas, Offset center, GameUnit unit) {
+    final levelBadgeRadius = engine.hexSize * 0.15;
+    final badgeCenter = Offset(
+      center.dx + engine.hexSize * 0.45,
+      center.dy - engine.hexSize * 0.45,
+    );
+
+    // Draw level badge background
+    canvas.drawCircle(
+      badgeCenter,
+      levelBadgeRadius,
+      Paint()..color = Colors.amber.shade600,
+    );
+
+    // Draw level badge border
+    canvas.drawCircle(
+      badgeCenter,
+      levelBadgeRadius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = Colors.black87,
+    );
+
+    // Draw level number
+    final levelPainter = TextPainter(
+      text: TextSpan(
+        text: '${unit.level}',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: engine.hexSize * 0.2,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    levelPainter.layout();
+    levelPainter.paint(
+      canvas,
+      Offset(
+        badgeCenter.dx - levelPainter.width / 2,
+        badgeCenter.dy - levelPainter.height / 2,
+      ),
+    );
+  }
+
+  void _drawExperienceBar(Canvas canvas, Offset center, GameUnit unit) {
+    const barWidth = 25.0;
+    const barHeight = 3.0;
+    final barY = center.dy + engine.hexSize * 0.6;
+
+    // Background bar
+    canvas.drawRect(
+      Rect.fromLTWH(center.dx - barWidth / 2, barY, barWidth, barHeight),
+      Paint()..color = Colors.grey.shade600,
+    );
+
+    // Experience progress bar
+    final expWidth = barWidth * unit.experienceProgress;
+    canvas.drawRect(
+      Rect.fromLTWH(center.dx - barWidth / 2, barY, expWidth, barHeight),
+      Paint()..color = Colors.cyan.shade400,
     );
   }
 
