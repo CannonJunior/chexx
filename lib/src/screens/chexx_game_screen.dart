@@ -511,7 +511,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Unit Abilities',
+            'Abilities',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 14,
@@ -541,7 +541,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
           const SizedBox(height: 8),
 
           // Unit stats
-          _buildUnitStatItem('Health', '${selectedUnit.health}/${selectedUnit.maxHealth}', Icons.favorite),
+          _buildUnitStatItem('Health', '${selectedUnit.currentHealth}/${selectedUnit.maxHealth}', Icons.favorite),
           _buildUnitStatItem('Movement', '${selectedUnit.effectiveMovementRange}', Icons.directions_run),
           _buildUnitStatItem('Attack Range', '${selectedUnit.attackRange}', Icons.gps_fixed),
           _buildUnitStatItem('Attack Damage', '${selectedUnit.effectiveAttackDamage}', Icons.flash_on),
@@ -814,6 +814,17 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
         return 'Spawn Boost';
       case MetaAbilityType.heal:
         return 'Regeneration';
+      case MetaAbilityType.shield:
+        return 'Shield';
+    }
+  }
+
+  String _getAbilityName(MetaAbilityType type) {
+    switch (type) {
+      case MetaAbilityType.spawn:
+        return 'Spawn Unit';
+      case MetaAbilityType.heal:
+        return 'Heal';
       case MetaAbilityType.shield:
         return 'Shield';
     }

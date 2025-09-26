@@ -140,7 +140,7 @@ class TestGameScreen extends StatelessWidget {
                       _buildStatusItem('✅ Flutter web setup', 'Complete'),
                       _buildStatusItem('✅ Firefox integration', 'Ready'),
                       _buildStatusItem('✅ MIME type fix', 'Applied'),
-                      _buildStatusItem('✅ Port 9090 config', 'Configured'),
+                      _buildStatusItem('✅ Port 8888 config', 'Configured'),
                     ],
                   ),
                 ),

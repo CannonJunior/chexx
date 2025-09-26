@@ -66,7 +66,7 @@ source ./setup_flutter_path.sh
 3. **Run the Game**:
    ```bash
    # Web (recommended for development)
-   flutter run -d web-server --web-port=9090
+   flutter run -d web-server --web-port=8888
 
    # Desktop Linux
    flutter config --enable-linux-desktop

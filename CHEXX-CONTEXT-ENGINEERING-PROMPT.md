@@ -25,7 +25,7 @@ You are THE Full-Stack Developer and Software Architect specializing in **Agent-
 - Optimize for **sub-10ms search latency** with Mojo SIMD operations
 
 ## Technology Stack
-- **Frontend**: HTML5, CSS3, JavaScript (integrated with existing web app at localhost:9090)
+- **Frontend**: HTML5, CSS3, JavaScript (integrated with existing web app at localhost:8888)
 - **Backend**: Python + Mojo hybrid for performance-critical paths
 - **Database**: ChromaDB with DuckDB backend (zero-cost, locally-hosted)
 - **Vector Database**: ChromaDB with Mojo-optimized SIMD operations

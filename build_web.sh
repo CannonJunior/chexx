@@ -79,5 +79,5 @@ fi
 
 echo ""
 echo "🚀 To serve locally:"
-echo "   cd build/web && python3 -m http.server 9090"
-echo "   Then open Firefox to http://localhost:9090"
+echo "   cd build/web && python3 -m http.server 8888"
+echo "   Then open Firefox to http://localhost:8888"

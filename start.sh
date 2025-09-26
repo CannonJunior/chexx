@@ -32,6 +32,58 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to check and kill process using port 8888
+check_and_kill_port_8888() {
+    local port=8888
+    print_status "Checking if port $port is in use..."
+
+    # Check if port is in use using lsof
+    if command -v lsof &> /dev/null; then
+        local pid=$(lsof -ti :$port 2>/dev/null | head -1)
+
+        if [[ -n "$pid" ]]; then
+            # Get process name and command for the PID
+            local process_name=$(ps -p $pid -o comm= 2>/dev/null || echo "unknown")
+            local process_cmd=$(ps -p $pid -o cmd= 2>/dev/null || echo "unknown")
+
+            print_warning "Port $port is in use by process: $process_name (PID: $pid)"
+            print_status "Process command: $process_cmd"
+
+            # Kill only the specific process, not related browser processes
+            if [[ "$process_name" != "firefox" ]] && [[ "$process_name" != "chrome" ]] && [[ "$process_name" != "chromium" ]]; then
+                print_status "Killing process $pid ($process_name)..."
+                if kill $pid 2>/dev/null; then
+                    sleep 2
+                    # Verify the process is dead
+                    if ! kill -0 $pid 2>/dev/null; then
+                        print_success "Successfully killed process using port $port"
+                    else
+                        print_warning "Process still running, trying force kill..."
+                        kill -9 $pid 2>/dev/null
+                        sleep 1
+                    fi
+                else
+                    print_error "Failed to kill process $pid"
+                fi
+            else
+                print_warning "Process appears to be a browser. Skipping kill to avoid disrupting user's browsing."
+                print_status "You may need to manually close the tab or process using port $port"
+            fi
+        else
+            print_success "Port $port is available"
+        fi
+    else
+        # Fallback using netstat if lsof is not available
+        print_warning "lsof not found, using netstat as fallback..."
+        if netstat -tuln 2>/dev/null | grep -q ":$port "; then
+            print_warning "Port $port appears to be in use (netstat check)"
+            print_status "Please manually check: netstat -tuln | grep :$port"
+        else
+            print_success "Port $port appears available (netstat check)"
+        fi
+    fi
+}
+
 # Check if Flutter is installed or available in common locations
 FLUTTER_PATH=""
 
@@ -162,8 +214,11 @@ case $choice in
         if command -v firefox &> /dev/null; then
             print_status "Starting Flutter web server for Firefox..."
 
+            # Check and kill any process using port 8888
+            check_and_kill_port_8888
+
             # Start the server in the background
-            flutter run -d web-server --web-port=9090 --web-hostname=localhost --release &
+            flutter run -d web-server --web-port=8888 --web-hostname=localhost --release &
             SERVER_PID=$!
 
             # Wait for server to start
@@ -172,7 +227,7 @@ case $choice in
 
             # Check if server is responding
             for i in {1..10}; do
-                if curl -s http://localhost:9090 > /dev/null 2>&1; then
+                if curl -s http://localhost:8888 > /dev/null 2>&1; then
                     print_success "Web server is ready!"
                     break
                 elif [[ $i -eq 10 ]]; then
@@ -183,14 +238,18 @@ case $choice in
                 sleep 2
             done
 
-            print_success "Opening Firefox to http://localhost:9090"
-            firefox http://localhost:9090 &
+            print_success "Opening Firefox to http://localhost:8888"
+            firefox http://localhost:8888 &
 
             # Keep the server running
             wait $SERVER_PID
         else
             print_warning "Firefox not found, using default web browser"
-            flutter run -d web-server --web-port=9090 --web-hostname=localhost --release
+
+            # Check and kill any process using port 8888
+            check_and_kill_port_8888
+
+            flutter run -d web-server --web-port=8888 --web-hostname=localhost --release
         fi
         ;;
     2)
