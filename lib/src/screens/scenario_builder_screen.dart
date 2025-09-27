@@ -119,6 +119,15 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(8),
                 children: [
+                  Text(
+                    'Unit Types',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   _buildPlayerUnits('Player 1 (Blue)', Player.player1),
                   const SizedBox(height: 16),
                   _buildPlayerUnits('Player 2 (Red)', Player.player2),
@@ -463,6 +472,39 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           ),
           const Spacer(),
 
+          // Orientation toggle button
+          AnimatedBuilder(
+            animation: builderState,
+            builder: (context, child) {
+              return Container(
+                margin: const EdgeInsets.only(right: 8),
+                child: ElevatedButton.icon(
+                  onPressed: () => builderState.toggleHexOrientation(),
+                  icon: Icon(
+                    builderState.hexOrientation == HexOrientation.flat
+                        ? Icons.hexagon_outlined
+                        : Icons.change_history_outlined,
+                    size: 16,
+                  ),
+                  label: Text(
+                    builderState.hexOrientation == HexOrientation.flat
+                        ? 'Flat'
+                        : 'Pointy',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: builderState.hexOrientation == HexOrientation.flat
+                        ? Colors.blue.shade600
+                        : Colors.purple.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: const Size(80, 36),
+                  ),
+                ),
+              );
+            },
+          ),
+
           // Back button
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -671,9 +713,7 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
     // Handle removal mode - removes everything from the hex
     if (builderState.isRemoveMode) {
-      builderState.removeUnit(hexCoord);
-      builderState.removeStructure(hexCoord);
-      // Note: Don't remove tile type, only clear units and structures
+      builderState.placeItem(hexCoord); // Use placeItem which handles remove mode properly
       return;
     }
 
@@ -705,9 +745,15 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     }
 
     if (builderState.selectedTileType != null) {
-      // Tile mode: only interact with tile types
-      // Place or change tile type
-      builderState.placeItem(hexCoord);
+      // Tile mode: place tile or remove if clicking on same type
+      final existingTile = builderState.board.getTile(hexCoord);
+      if (existingTile != null && existingTile.type == builderState.selectedTileType) {
+        // Clicking on a tile that already has the selected type - remove the entire tile
+        builderState.removeTile(hexCoord);
+      } else {
+        // Place or change tile type
+        builderState.placeItem(hexCoord);
+      }
       return;
     }
 

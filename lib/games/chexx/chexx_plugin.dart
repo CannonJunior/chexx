@@ -97,6 +97,7 @@ class ChexxPlugin implements GamePlugin {
           movementRange: 1,
           abilities: [],
           movementType: MovementType.adjacent,
+          properties: {'incrementable': true},
         ),
         'scout': UnitTypeConfig(
           name: 'scout',
@@ -107,6 +108,7 @@ class ChexxPlugin implements GamePlugin {
           movementRange: 3,
           abilities: ['long_range_scan'],
           movementType: MovementType.straight,
+          properties: {'incrementable': false},
         ),
         'knight': UnitTypeConfig(
           name: 'knight',
@@ -117,6 +119,7 @@ class ChexxPlugin implements GamePlugin {
           movementRange: 2,
           abilities: [],
           movementType: MovementType.knight,
+          properties: {'incrementable': false},
         ),
         'guardian': UnitTypeConfig(
           name: 'guardian',
@@ -127,6 +130,7 @@ class ChexxPlugin implements GamePlugin {
           movementRange: 1,
           abilities: ['swap'],
           movementType: MovementType.adjacent,
+          properties: {'incrementable': true},
         ),
       },
       abilities: {

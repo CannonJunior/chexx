@@ -333,17 +333,54 @@ class ChexxGamePainter extends CustomPainter {
       final unit = gameState.simpleUnits[i];
       final center = engine.hexToScreen(unit.position, size);
 
-      // Unit size based on type
-      final radius = _getUnitRadius(unit.unitType);
+      // Check if unit is incrementable
+      final isIncrementable = _isUnitIncrementable(unit.unitType);
 
-      // Base color by owner
-      final baseColor = (unit.owner == Player.player1) ? Colors.blue : Colors.red;
+      if (isIncrementable) {
+        _drawIncrementableUnit(canvas, center, unit);
+      } else {
+        _drawStandardUnit(canvas, center, unit);
+      }
+    }
+  }
 
-      // Modify color intensity based on unit type
-      final color = _getUnitColor(baseColor, unit.unitType);
+  void _drawStandardUnit(Canvas canvas, Offset center, SimpleGameUnit unit) {
+    // Unit size based on type
+    final radius = _getUnitRadius(unit.unitType);
+
+    // Base color by owner
+    final baseColor = (unit.owner == Player.player1) ? Colors.blue : Colors.red;
+
+    // Modify color intensity based on unit type
+    final color = _getUnitColor(baseColor, unit.unitType);
+    final paint = Paint()..color = color;
+
+    // Draw unit as circle
+    canvas.drawCircle(center, radius, paint);
+
+    // Draw border if selected
+    if (unit.isSelected) {
+      final borderPaint = Paint()
+        ..color = Colors.yellow
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3;
+      canvas.drawCircle(center, radius, borderPaint);
+    }
+
+    // Draw health indicator for units with more than 1 health
+    if (unit.maxHealth > 1) {
+      _drawSimpleHealthIndicator(canvas, center, unit.health, unit.maxHealth, radius);
+    }
+  }
+
+  void _drawIncrementableUnit(Canvas canvas, Offset center, SimpleGameUnit unit) {
+    final radius = _getUnitRadius(unit.unitType);
+    final baseColor = (unit.owner == Player.player1) ? Colors.blue : Colors.red;
+    final color = _getUnitColor(baseColor, unit.unitType);
+
+    if (unit.health > 6) {
+      // Draw single icon with health number for health > 6
       final paint = Paint()..color = color;
-
-      // Draw unit as circle
       canvas.drawCircle(center, radius, paint);
 
       // Draw border if selected
@@ -355,10 +392,100 @@ class ChexxGamePainter extends CustomPainter {
         canvas.drawCircle(center, radius, borderPaint);
       }
 
-      // Draw health indicator for units with more than 1 health
-      if (unit.maxHealth > 1) {
-        _drawSimpleHealthIndicator(canvas, center, unit.health, unit.maxHealth, radius);
+      // Draw health number
+      _drawHealthNumber(canvas, center, unit.health, radius);
+    } else {
+      // Draw multiple icons based on current health (1-6)
+      _drawMultipleIcons(canvas, center, unit, radius, color);
+    }
+  }
+
+  void _drawMultipleIcons(Canvas canvas, Offset center, SimpleGameUnit unit, double radius, Color color) {
+    final health = unit.health;
+    final iconRadius = radius * 0.6; // Smaller icons when multiple
+
+    // Calculate positions for multiple icons in a compact arrangement
+    final positions = _calculateIconPositions(center, health, iconRadius);
+
+    for (int i = 0; i < positions.length; i++) {
+      final iconPaint = Paint()..color = color;
+      canvas.drawCircle(positions[i], iconRadius, iconPaint);
+
+      // Draw border for selected unit on all icons
+      if (unit.isSelected) {
+        final borderPaint = Paint()
+          ..color = Colors.yellow
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
+        canvas.drawCircle(positions[i], iconRadius, borderPaint);
       }
+    }
+  }
+
+  List<Offset> _calculateIconPositions(Offset center, int count, double iconRadius) {
+    List<Offset> positions = [];
+
+    if (count == 1) {
+      positions.add(center);
+    } else if (count == 2) {
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy));
+    } else if (count == 3) {
+      positions.add(Offset(center.dx, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.5));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.5));
+    } else if (count == 4) {
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.8));
+    } else if (count == 5) {
+      positions.add(Offset(center.dx, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy - iconRadius * 0.3));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy - iconRadius * 0.3));
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.8));
+    } else if (count == 6) {
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy - iconRadius * 0.8));
+      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.8));
+    }
+
+    return positions;
+  }
+
+  void _drawHealthNumber(Canvas canvas, Offset center, int health, double radius) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: health.toString(),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: radius * 0.8,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.layout();
+    final textOffset = Offset(
+      center.dx - textPainter.width / 2,
+      center.dy - textPainter.height / 2,
+    );
+    textPainter.paint(canvas, textOffset);
+  }
+
+  bool _isUnitIncrementable(String unitType) {
+    // Check unit configuration for incrementable property
+    switch (unitType) {
+      case 'minor': return true;
+      case 'guardian': return true;
+      case 'scout': return false;
+      case 'knight': return false;
+      default: return false;
     }
   }
 

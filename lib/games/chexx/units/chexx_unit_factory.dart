@@ -41,6 +41,7 @@ class ChexxUnitFactory implements UnitFactory {
           'attackRange': 1,
           'movementRange': 1,
           'movementType': 'adjacent',
+          'incrementable': true,
         };
       case 'scout':
         return {
@@ -51,6 +52,7 @@ class ChexxUnitFactory implements UnitFactory {
           'attackRange': 3,
           'movementRange': 3,
           'movementType': 'straight',
+          'incrementable': false,
         };
       case 'knight':
         return {
@@ -61,6 +63,7 @@ class ChexxUnitFactory implements UnitFactory {
           'attackRange': 2,
           'movementRange': 2,
           'movementType': 'knight',
+          'incrementable': false,
         };
       case 'guardian':
         return {
@@ -71,6 +74,7 @@ class ChexxUnitFactory implements UnitFactory {
           'attackRange': 1,
           'movementRange': 1,
           'movementType': 'adjacent',
+          'incrementable': true,
         };
       default:
         return {};

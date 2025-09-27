@@ -5,6 +5,12 @@ import 'game_unit.dart';
 import 'game_board.dart';
 import '../../core/interfaces/unit_factory.dart';
 
+/// Enumeration of hexagon orientations
+enum HexOrientation {
+  flat,
+  pointy,
+}
+
 /// Enumeration of structure types
 enum StructureType {
   bunker,
@@ -155,6 +161,9 @@ class ScenarioBuilderState extends ChangeNotifier {
   HexCoordinate? cursorPosition;
   bool isCreateNewMode = false;
   bool isRemoveMode = false;
+
+  // Hexagon orientation setting
+  HexOrientation hexOrientation = HexOrientation.flat;
 
   ScenarioBuilderState() {
     _initializeAvailableUnits();
@@ -413,6 +422,11 @@ class ScenarioBuilderState extends ChangeNotifier {
       return true;
     }
     return false;
+  }
+
+  /// Remove tile at position
+  bool removeTile(HexCoordinate position) {
+    return _removeTile(position);
   }
 
   /// Toggle Meta hex at position
@@ -761,5 +775,13 @@ class ScenarioBuilderState extends ChangeNotifier {
     } catch (e) {
       print('Error loading scenario data: $e');
     }
+  }
+
+  /// Toggle hexagon orientation between flat and pointy
+  void toggleHexOrientation() {
+    hexOrientation = hexOrientation == HexOrientation.flat
+        ? HexOrientation.pointy
+        : HexOrientation.flat;
+    notifyListeners();
   }
 }
