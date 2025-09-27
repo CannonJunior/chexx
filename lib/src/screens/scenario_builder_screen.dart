@@ -7,6 +7,7 @@ import '../models/scenario_builder_state.dart';
 import '../models/hex_coordinate.dart';
 import '../models/game_unit.dart';
 import '../engine/game_engine.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 /// Scenario Builder screen for creating custom game configurations
 class ScenarioBuilderScreen extends StatefulWidget {

@@ -2,20 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:html' as html;
 import 'dart:convert';
-import 'src/screens/chexx_game_screen.dart';
+import 'core/engine/game_plugin_manager.dart';
+import 'games/chexx/chexx_plugin.dart';
 import 'src/screens/scenario_builder_screen.dart';
 
-void main() {
-  runApp(const ChexxApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize plugin system
+  final pluginManager = GamePluginManager();
+  final chexxPlugin = ChexxPlugin();
+  await chexxPlugin.initialize();
+  pluginManager.registerPlugin(chexxPlugin);
+
+  runApp(const TileGameFrameworkApp());
 }
 
-class ChexxApp extends StatelessWidget {
-  const ChexxApp({super.key});
+class TileGameFrameworkApp extends StatelessWidget {
+  const TileGameFrameworkApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CHEXX - Hexagonal Strategy Game',
+      title: 'Tile-Based Game Framework',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -264,18 +273,26 @@ class MainMenuScreen extends StatelessWidget {
       DeviceOrientation.landscapeRight,
     ]);
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const ChexxGameScreen(),
-      ),
-    ).then((_) {
-      // Reset orientation when returning to menu
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+    // Use plugin system to start CHEXX game
+    final pluginManager = GamePluginManager();
+    pluginManager.setActivePlugin('chexx').then((_) {
+      final gameScreen = pluginManager.createGameScreen();
+
+      if (gameScreen != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => gameScreen,
+          ),
+        ).then((_) {
+          // Reset orientation when returning to menu
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        });
+      }
     });
   }
 
@@ -640,7 +657,11 @@ class _ScenarioLoaderDialogState extends State<ScenarioLoaderDialog> {
     Navigator.of(context).pop(); // Close dialog
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => ChexxGameScreen(scenarioConfig: loadedScenario),
+        builder: (context) {
+          // Create CHEXX plugin instance for the game screen
+          final plugin = ChexxPlugin();
+          return plugin.createGameScreen(scenarioConfig: loadedScenario);
+        },
       ),
     ).then((_) {
       // Reset orientation when returning to menu

@@ -201,9 +201,9 @@ case $choice in
 
         # Build web version first to ensure all assets are compiled
         print_status "Building web version..."
-        if ! flutter build web --web-renderer canvaskit; then
+        if ! flutter build web --web-renderer canvaskit --no-source-maps; then
             print_error "Web build failed. Trying with HTML renderer..."
-            if ! flutter build web --web-renderer html; then
+            if ! flutter build web --web-renderer html --no-source-maps; then
                 print_error "Web build failed with both renderers."
                 exit 1
             fi

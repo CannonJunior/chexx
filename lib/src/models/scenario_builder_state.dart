@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 /// Represents a unit template in the scenario builder
 class UnitTemplate {
@@ -141,7 +142,8 @@ class ScenarioBuilderState extends ChangeNotifier {
     if (!board.isValidCoordinate(position)) return false;
 
     // Check if position is already occupied
-    final existingUnit = placedUnits.where((unit) => unit.position == position).firstOrNull;
+    final existingUnits = placedUnits.where((unit) => unit.position == position).toList();
+    final existingUnit = existingUnits.isNotEmpty ? existingUnits.first : null;
     if (existingUnit != null) {
       // Replace existing unit
       placedUnits.remove(existingUnit);
@@ -158,7 +160,8 @@ class ScenarioBuilderState extends ChangeNotifier {
 
   /// Remove unit at position
   bool removeUnit(HexCoordinate position) {
-    final unitToRemove = placedUnits.where((unit) => unit.position == position).firstOrNull;
+    final unitsToRemove = placedUnits.where((unit) => unit.position == position).toList();
+    final unitToRemove = unitsToRemove.isNotEmpty ? unitsToRemove.first : null;
     if (unitToRemove != null) {
       placedUnits.remove(unitToRemove);
       notifyListeners();
@@ -181,7 +184,8 @@ class ScenarioBuilderState extends ChangeNotifier {
 
   /// Get unit at position (if any)
   PlacedUnit? getUnitAt(HexCoordinate position) {
-    return placedUnits.where((unit) => unit.position == position).firstOrNull;
+    final unitsAtPosition = placedUnits.where((unit) => unit.position == position).toList();
+    return unitsAtPosition.isNotEmpty ? unitsAtPosition.first : null;
   }
 
   /// Check if position is a Meta hex

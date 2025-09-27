@@ -3,6 +3,7 @@ import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
 import 'meta_ability.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 enum GamePhase { setup, playing, gameOver }
 
@@ -515,9 +516,9 @@ class GameState extends ChangeNotifier {
   bool useMetaAbility(MetaAbilityType abilityType, HexCoordinate target) {
     if (selectedMetaHex == null) return false;
 
-    final ability = selectedMetaHex!.availableAbilities
-        .where((a) => a.type == abilityType)
-        .firstOrNull;
+    final matchingAbilities = selectedMetaHex!.availableAbilities
+        .where((a) => a.type == abilityType).toList();
+    final ability = matchingAbilities.isNotEmpty ? matchingAbilities.first : null;
 
     if (ability == null || !selectedMetaHex!.isAbilityAvailable(abilityType)) {
       return false;
@@ -613,16 +614,16 @@ class GameState extends ChangeNotifier {
 
   /// Check if unit has shield protection
   bool isUnitShielded(GameUnit unit) {
-    return activeMetaEffects.any((effect) =>
+    return activeMetaEffects.where((effect) =>
         effect.type == MetaAbilityType.shield &&
-        effect.affectedPlayer == unit.owner);
+        effect.affectedPlayer == unit.owner).toList().isNotEmpty;
   }
 
   /// Get Meta hex at position
   MetaHex? getMetaHexAt(HexCoordinate position) {
-    return metaHexes
-        .where((metaHex) => metaHex.position == position)
-        .firstOrNull;
+    final matchingMetaHexes = metaHexes
+        .where((metaHex) => metaHex.position == position).toList();
+    return matchingMetaHexes.isNotEmpty ? matchingMetaHexes.first : null;
   }
 
   /// Reset game to initial state

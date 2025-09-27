@@ -1,5 +1,6 @@
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 enum HexType { normal, meta, blocked }
 
@@ -47,8 +48,9 @@ class GameBoard {
 
   /// Get unit at position
   GameUnit? getUnitAt(HexCoordinate position, List<GameUnit> units) {
-    return units.where((unit) =>
-        unit.isAlive && unit.position == position).firstOrNull;
+    final matchingUnits = units.where((unit) =>
+        unit.isAlive && unit.position == position).toList();
+    return matchingUnits.isNotEmpty ? matchingUnits.first : null;
   }
 
   /// Get all units of a player

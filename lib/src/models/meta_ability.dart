@@ -1,5 +1,6 @@
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 /// Types of Meta abilities available
 enum MetaAbilityType { spawn, heal, shield }

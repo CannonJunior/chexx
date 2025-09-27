@@ -131,6 +131,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.15.0"
+  oxygen:
+    dependency: "direct main"
+    description:
+      name: oxygen
+      sha256: "5bd4afffef3d5e5f567e4710e5c0d4554ac50ce324bb1d9c2961eb761c659f60"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.1"
   path:
     dependency: transitive
     description:

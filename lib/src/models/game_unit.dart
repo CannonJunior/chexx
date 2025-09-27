@@ -1,4 +1,5 @@
 import 'hex_coordinate.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 /// Level bonuses for units
 class LevelBonuses {
@@ -29,7 +30,6 @@ class LevelBonuses {
 
 enum UnitType { minor, scout, knight, guardian }
 
-enum Player { player1, player2 }
 
 enum UnitState { idle, selected, moving, attacking, dead }
 
@@ -125,8 +125,9 @@ class GameUnit {
     if (distance > effectiveMovementRange) return false;
 
     // Check if target position is occupied
-    final occupiedBy = allUnits.where((unit) =>
-        unit.isAlive && unit.position == target).firstOrNull;
+    final occupiedUnits = allUnits.where((unit) =>
+        unit.isAlive && unit.position == target).toList();
+    final occupiedBy = occupiedUnits.isNotEmpty ? occupiedUnits.first : null;
     if (occupiedBy != null) return false;
 
     // Check movement type constraints
@@ -167,9 +168,9 @@ class GameUnit {
     for (final target in possibleAttacks) {
       if (target != position && canAttackPosition(target, allUnits)) {
         // Check if there's an enemy unit at target
-        final targetUnit = allUnits.where((unit) =>
-            unit.isAlive && unit.position == target && unit.owner != owner)
-            .firstOrNull;
+        final targetUnits = allUnits.where((unit) =>
+            unit.isAlive && unit.position == target && unit.owner != owner).toList();
+        final targetUnit = targetUnits.isNotEmpty ? targetUnits.first : null;
         if (targetUnit != null) {
           validAttacks.add(target);
         }
@@ -326,7 +327,8 @@ class GameUnit {
 
   /// Guardian swap ability - exchange positions with friendly unit
   bool _performSwapAbility(HexCoordinate target, List<GameUnit> allUnits) {
-    final targetUnit = allUnits.where((u) => u.position == target && u.isAlive).firstOrNull;
+    final targetUnits = allUnits.where((u) => u.position == target && u.isAlive).toList();
+    final targetUnit = targetUnits.isNotEmpty ? targetUnits.first : null;
     if (targetUnit == null || targetUnit.owner != owner) return false;
 
     final distance = position.distanceTo(target);
