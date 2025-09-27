@@ -36,9 +36,14 @@ class TileGameFrameworkApp extends StatelessWidget {
   }
 }
 
-class MainMenuScreen extends StatelessWidget {
+class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
+  @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -568,6 +573,14 @@ class _ScenarioLoaderDialogState extends State<ScenarioLoaderDialog> {
           ),
         ),
         ElevatedButton(
+          onPressed: loadedScenario != null ? () => _openScenarioBuilderWithData(context) : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade600,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Scenario Builder'),
+        ),
+        ElevatedButton(
           onPressed: loadedScenario != null ? () => _startGameWithScenario(context) : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green.shade600,
@@ -662,6 +675,31 @@ class _ScenarioLoaderDialogState extends State<ScenarioLoaderDialog> {
           final plugin = ChexxPlugin();
           return plugin.createGameScreen(scenarioConfig: loadedScenario);
         },
+      ),
+    ).then((_) {
+      // Reset orientation when returning to menu
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    });
+  }
+
+  void _openScenarioBuilderWithData(BuildContext context) {
+    // Close the dialog first
+    Navigator.of(context).pop();
+
+    // Set landscape orientation for better editing
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ScenarioBuilderScreen(initialScenarioData: loadedScenario),
       ),
     ).then((_) {
       // Reset orientation when returning to menu

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/engine/game_engine_base.dart';
 import '../../../core/models/hex_coordinate.dart';
 import '../../../core/interfaces/unit_factory.dart';
@@ -19,21 +20,29 @@ class ChexxGameScreen extends StatefulWidget {
 
 class _ChexxGameScreenState extends State<ChexxGameScreen> {
   late ChexxGameEngine gameEngine;
+  late FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
     gameEngine = ChexxGameEngine(
       gamePlugin: widget.gamePlugin ?? ChexxPlugin(),
       scenarioConfig: widget.scenarioConfig,
     );
     gameEngine.addListener(_onGameStateChanged);
+
+    // Request focus for keyboard input
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
   }
 
   @override
   void dispose() {
     gameEngine.removeListener(_onGameStateChanged);
     gameEngine.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -48,24 +57,28 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Stack(
-          children: [
-            // Game canvas
-            Positioned.fill(
-              child: GestureDetector(
-                onTapDown: (details) => _handleTap(details.globalPosition),
-                child: CustomPaint(
-                  painter: ChexxGamePainter(gameEngine),
-                  size: Size.infinite,
+        child: KeyboardListener(
+          focusNode: _focusNode,
+          onKeyEvent: _handleKeyEvent,
+          child: Stack(
+            children: [
+              // Game canvas
+              Positioned.fill(
+                child: GestureDetector(
+                  onTapDown: (details) => _handleTap(details.globalPosition),
+                  child: CustomPaint(
+                    painter: ChexxGamePainter(gameEngine),
+                    size: Size.infinite,
+                  ),
                 ),
               ),
-            ),
 
-            // Game UI overlay
-            Positioned.fill(
-              child: _buildGameUI(),
-            ),
-          ],
+              // Game UI overlay
+              Positioned.fill(
+                child: _buildGameUI(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -75,6 +88,93 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
     gameEngine.handleTap(position, size);
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      _handleKeyPress(event.logicalKey);
+    }
+  }
+
+  void _handleKeyPress(LogicalKeyboardKey key) {
+    final gameState = gameEngine.gameState as ChexxGameState;
+    SimpleGameUnit? selectedUnit;
+
+    // Find selected unit
+    for (final unit in gameState.simpleUnits) {
+      if (unit.isSelected && unit.owner == gameState.currentPlayer) {
+        selectedUnit = unit;
+        break;
+      }
+    }
+
+    if (selectedUnit == null || selectedUnit.remainingMovement <= 0) return;
+
+    // Map keys to hex directions
+    HexCoordinate? direction;
+    switch (key) {
+      case LogicalKeyboardKey.keyQ:
+        direction = const HexCoordinate(-1, 0, 1); // Northwest
+        break;
+      case LogicalKeyboardKey.keyW:
+        direction = const HexCoordinate(0, -1, 1); // North
+        break;
+      case LogicalKeyboardKey.keyE:
+        direction = const HexCoordinate(1, -1, 0); // Northeast
+        break;
+      case LogicalKeyboardKey.keyA:
+        direction = const HexCoordinate(-1, 1, 0); // Southwest
+        break;
+      case LogicalKeyboardKey.keyS:
+        direction = const HexCoordinate(0, 1, -1); // South
+        break;
+      case LogicalKeyboardKey.keyD:
+        direction = const HexCoordinate(1, 0, -1); // Southeast
+        break;
+    }
+
+    if (direction != null) {
+      _moveUnitInDirection(selectedUnit, direction);
+    }
+  }
+
+  void _moveUnitInDirection(SimpleGameUnit unit, HexCoordinate direction) {
+    final gameState = gameEngine.gameState as ChexxGameState;
+    final targetPosition = HexCoordinate(
+      unit.position.q + direction.q,
+      unit.position.r + direction.r,
+      unit.position.s + direction.s,
+    );
+
+    // Check if target position is valid (no other unit there)
+    bool isOccupied = false;
+    for (final otherUnit in gameState.simpleUnits) {
+      if (otherUnit.position == targetPosition) {
+        isOccupied = true;
+        break;
+      }
+    }
+
+    if (!isOccupied && unit.remainingMovement > 0) {
+      // Create updated unit with new position and reduced movement
+      final updatedUnit = SimpleGameUnit(
+        id: unit.id,
+        unitType: unit.unitType,
+        owner: unit.owner,
+        position: targetPosition,
+        health: unit.health,
+        maxHealth: unit.maxHealth,
+        remainingMovement: unit.remainingMovement - 1,
+        isSelected: true,
+      );
+
+      // Replace unit in the list
+      final index = gameState.simpleUnits.indexOf(unit);
+      if (index != -1) {
+        gameState.simpleUnits[index] = updatedUnit;
+        gameEngine.notifyListeners();
+      }
+    }
   }
 
   Widget _buildGameUI() {
@@ -249,7 +349,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
 
           // Unit stats
           _buildStatRow('Health', '${unit.health}/${unit.maxHealth}', Icons.favorite),
-          _buildStatRow('Movement', '${_getMovementRange(unit.unitType)}', Icons.directions_run),
+          _buildStatRow('Movement', '${unit.remainingMovement}/${_getMovementRange(unit.unitType)}', Icons.directions_run),
           _buildStatRow('Attack Range', '${_getAttackRange(unit.unitType)}', Icons.gps_fixed),
           _buildStatRow('Attack Damage', '${_getAttackDamage(unit.unitType)}', Icons.flash_on),
 

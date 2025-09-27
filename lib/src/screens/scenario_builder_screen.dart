@@ -6,12 +6,15 @@ import 'dart:math';
 import '../models/scenario_builder_state.dart';
 import '../models/hex_coordinate.dart';
 import '../models/game_unit.dart';
+import '../models/game_board.dart';
 import '../engine/game_engine.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 /// Scenario Builder screen for creating custom game configurations
 class ScenarioBuilderScreen extends StatefulWidget {
-  const ScenarioBuilderScreen({super.key});
+  final Map<String, dynamic>? initialScenarioData;
+
+  const ScenarioBuilderScreen({super.key, this.initialScenarioData});
 
   @override
   State<ScenarioBuilderScreen> createState() => _ScenarioBuilderScreenState();
@@ -21,11 +24,29 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   late ScenarioBuilderState builderState;
   final double hexSize = 50.0;
   Offset? _lastTapPosition;
+  late FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     builderState = ScenarioBuilderState();
+    _focusNode = FocusNode();
+
+    // Load initial scenario data if provided
+    if (widget.initialScenarioData != null) {
+      builderState.loadFromScenarioData(widget.initialScenarioData!);
+    }
+
+    // Request focus for keyboard input
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -33,37 +54,41 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Row(
-          children: [
-            // Left panel: Unit palette
-            Container(
-              width: 200,
-              color: Colors.grey.shade900,
-              child: _buildUnitPalette(),
-            ),
-
-            // Main area: Game board
-            Expanded(
-              child: Column(
-                children: [
-                  // Top toolbar
-                  _buildTopToolbar(),
-
-                  // Game board
-                  Expanded(
-                    child: _buildGameBoard(),
-                  ),
-                ],
+        child: KeyboardListener(
+          focusNode: _focusNode,
+          onKeyEvent: _handleKeyEvent,
+          child: Row(
+            children: [
+              // Left panel: Unit palette
+              Container(
+                width: 200,
+                color: Colors.grey.shade900,
+                child: _buildUnitPalette(),
               ),
-            ),
 
-            // Right panel: Controls
-            Container(
-              width: 200,
-              color: Colors.grey.shade900,
-              child: _buildControlPanel(),
-            ),
-          ],
+              // Main area: Game board
+              Expanded(
+                child: Column(
+                  children: [
+                    // Top toolbar
+                    _buildTopToolbar(),
+
+                    // Game board
+                    Expanded(
+                      child: _buildGameBoard(),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Right panel: Controls
+              Container(
+                width: 200,
+                color: Colors.grey.shade900,
+                child: _buildControlPanel(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -97,6 +122,10 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
                   _buildPlayerUnits('Player 1 (Blue)', Player.player1),
                   const SizedBox(height: 16),
                   _buildPlayerUnits('Player 2 (Red)', Player.player2),
+                  const SizedBox(height: 24),
+                  _buildTileTypes(),
+                  const SizedBox(height: 24),
+                  _buildStructureTypes(),
                 ],
               ),
             ),
@@ -164,6 +193,223 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     );
   }
 
+  Widget _buildTileTypes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tile Types',
+          style: TextStyle(
+            color: Colors.grey.shade300,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            _buildTileTypeButton(HexType.normal, 'Normal', Colors.green.shade200),
+            _buildTileTypeButton(HexType.meta, 'Meta', Colors.purple.shade300),
+            _buildTileTypeButton(HexType.blocked, 'Blocked', Colors.grey.shade600),
+            _buildSpecialModeButton('Create New', Colors.blue.shade300, isCreateNew: true),
+            _buildSpecialModeButton('Remove', Colors.red.shade400, isRemove: true),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStructureTypes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Structure Types',
+          style: TextStyle(
+            color: Colors.grey.shade300,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: builderState.availableStructures.map((structure) {
+            return _buildStructureTypeButton(structure);
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTileTypeButton(HexType tileType, String name, Color color) {
+    final isSelected = builderState.selectedTileType == tileType;
+
+    return GestureDetector(
+      onTap: () => builderState.selectTileType(tileType),
+      child: Container(
+        width: 80,
+        height: 60,
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.8) : color.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.white : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _getTileTypeIcon(tileType),
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpecialModeButton(String name, Color color, {bool isCreateNew = false, bool isRemove = false}) {
+    final isSelected = (isCreateNew && builderState.isCreateNewMode) || (isRemove && builderState.isRemoveMode);
+
+    return GestureDetector(
+      onTap: () {
+        if (isCreateNew) {
+          builderState.enableCreateNewMode();
+        } else if (isRemove) {
+          builderState.enableRemoveMode();
+        }
+      },
+      child: Container(
+        width: 80,
+        height: 60,
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.8) : color.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.white : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isCreateNew ? Icons.add_circle : Icons.delete,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStructureTypeButton(StructureTemplate structure) {
+    final isSelected = builderState.selectedStructureTemplate == structure;
+    final color = _getStructureTypeColor(structure.type);
+    final name = _getStructureTypeName(structure.type);
+
+    return GestureDetector(
+      onTap: () => builderState.selectStructureTemplate(structure),
+      child: Container(
+        width: 80,
+        height: 60,
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.8) : color.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.white : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _getStructureTypeIcon(structure.type),
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getTileTypeIcon(HexType tileType) {
+    switch (tileType) {
+      case HexType.normal:
+        return Icons.hexagon_outlined;
+      case HexType.meta:
+        return Icons.star;
+      case HexType.blocked:
+        return Icons.block;
+    }
+  }
+
+  IconData _getStructureTypeIcon(StructureType structureType) {
+    switch (structureType) {
+      case StructureType.bunker:
+        return Icons.security; // Shield icon for bunker
+      case StructureType.bridge:
+        return Icons.horizontal_rule; // Horizontal line for bridge
+    }
+  }
+
+  Color _getStructureTypeColor(StructureType structureType) {
+    switch (structureType) {
+      case StructureType.bunker:
+        return Colors.brown.shade600; // Brown for bunker
+      case StructureType.bridge:
+        return Colors.grey.shade400; // Grey for bridge
+    }
+  }
+
+  String _getStructureTypeName(StructureType structureType) {
+    switch (structureType) {
+      case StructureType.bunker:
+        return 'Bunker';
+      case StructureType.bridge:
+        return 'Bridge';
+    }
+  }
+
   Widget _buildTopToolbar() {
     return Container(
       height: 50,
@@ -200,7 +446,6 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           color: const Color(0xFF1a1a2e),
           child: GestureDetector(
             onTapDown: (details) => _handleBoardTap(details.globalPosition),
-            onDoubleTap: () => _handleBoardDoubleTap(_lastTapPosition),
             child: CustomPaint(
               painter: ScenarioBuilderPainter(builderState, hexSize),
               size: Size.infinite,
@@ -358,6 +603,21 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     );
   }
 
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.keyQ ||
+          key == LogicalKeyboardKey.keyW ||
+          key == LogicalKeyboardKey.keyE ||
+          key == LogicalKeyboardKey.keyA ||
+          key == LogicalKeyboardKey.keyS ||
+          key == LogicalKeyboardKey.keyD) {
+        builderState.moveCursor(key.keyLabel.toLowerCase());
+        setState(() {}); // Update UI
+      }
+    }
+  }
+
   void _handleBoardTap(Offset globalPosition) {
     _lastTapPosition = globalPosition; // Store for double-tap handling
 
@@ -381,31 +641,15 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       return;
     }
 
-    // If no unit selected, do nothing
-    if (builderState.selectedUnitTemplate == null) return;
+    // If nothing selected, do nothing
+    if (builderState.selectedUnitTemplate == null &&
+        builderState.selectedTileType == null &&
+        !builderState.isCreateNewMode &&
+        !builderState.isRemoveMode) return;
 
-    // Place unit
-    builderState.placeUnit(hexCoord);
+    // Place unit or tile type
+    builderState.placeItem(hexCoord);
   }
-
-  void _handleBoardDoubleTap(Offset? globalPosition) {
-    if (globalPosition == null) return;
-
-    final renderBox = context.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(globalPosition);
-
-    // Adjust for the left panel width and top toolbar
-    final adjustedPosition = Offset(
-      localPosition.dx - 200,
-      localPosition.dy - 50,
-    );
-
-    final hexCoord = _screenToHex(adjustedPosition, renderBox.size);
-    if (hexCoord != null) {
-      builderState.toggleMetaHex(hexCoord);
-    }
-  }
-
 
   HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {
     final centerX = (canvasSize.width - 400) / 2; // Subtract panels
@@ -506,7 +750,10 @@ class ScenarioBuilderPainter extends CustomPainter {
     // Draw hex tiles
     _drawHexTiles(canvas, size, centerX, centerY);
 
-    // Draw placed units
+    // Draw placed structures (above tiles, below units)
+    _drawPlacedStructures(canvas, size, centerX, centerY);
+
+    // Draw placed units (on top)
     _drawPlacedUnits(canvas, size, centerX, centerY);
   }
 
@@ -524,12 +771,20 @@ class ScenarioBuilderPainter extends CustomPainter {
       ..strokeWidth = 2.0
       ..color = Colors.black54;
 
-    // Draw all valid board positions
-    final allPositions = HexCoordinate.hexesInRange(const HexCoordinate(0, 0, 0), 4);
+    final goldHighlightPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..color = Colors.amber.shade600;
+
+    final cursorPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..color = Colors.cyan.shade400;
+
+    // Draw expanded grid for tile creation (up to radius 8 for visual creation area)
+    final allPositions = HexCoordinate.hexesInRange(const HexCoordinate(0, 0, 0), 8);
 
     for (final coord in allPositions) {
-      if (!state.board.isValidCoordinate(coord)) continue;
-
       final vertices = _getHexVertices(coord, centerX, centerY);
       final path = Path();
 
@@ -540,12 +795,98 @@ class ScenarioBuilderPainter extends CustomPainter {
         }
         path.close();
 
-        // Fill hex
-        canvas.drawPath(path, state.isMetaHex(coord) ? metaPaint : normalPaint);
+        // Determine tile type and fill color
+        final existingTile = state.board.getTile(coord);
+        Paint fillPaint;
 
-        // Draw border
-        canvas.drawPath(path, strokePaint);
+        if (existingTile != null) {
+          // Existing tile - use appropriate color
+          fillPaint = state.isMetaHex(coord) ? metaPaint : normalPaint;
+        } else {
+          // Empty grid space - use subtle background
+          fillPaint = Paint()
+            ..style = PaintingStyle.fill
+            ..color = Colors.grey.shade200.withOpacity(0.3);
+        }
+
+        // Fill hex
+        canvas.drawPath(path, fillPaint);
+
+        // Draw border (lighter for empty spaces)
+        final borderPaint = existingTile != null ? strokePaint :
+          (Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.0
+            ..color = Colors.black26);
+        canvas.drawPath(path, borderPaint);
+
+        // Draw gold highlight for last edited tile
+        if (state.lastEditedTile == coord) {
+          canvas.drawPath(path, goldHighlightPaint);
+        }
+
+        // Draw cursor highlight
+        if (state.cursorPosition == coord) {
+          canvas.drawPath(path, cursorPaint);
+        }
       }
+    }
+
+  }
+
+  void _drawPlacedStructures(Canvas canvas, Size size, double centerX, double centerY) {
+    for (final placedStructure in state.placedStructures) {
+      final center = _hexToScreen(placedStructure.position, centerX, centerY);
+      final size = hexSize * 0.6;
+
+      // Structure colors based on type
+      final Color structureColor = _getStructureColor(placedStructure.template.type);
+
+      final fillPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = structureColor;
+
+      final strokePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..color = Colors.black87;
+
+      // Draw structure shape based on type
+      switch (placedStructure.template.type) {
+        case StructureType.bunker:
+          // Draw bunker as a square
+          final rect = Rect.fromCenter(center: center, width: size, height: size);
+          canvas.drawRect(rect, fillPaint);
+          canvas.drawRect(rect, strokePaint);
+          break;
+        case StructureType.bridge:
+          // Draw bridge as a rounded rectangle
+          final rect = Rect.fromCenter(center: center, width: size * 1.2, height: size * 0.6);
+          final rrect = RRect.fromRectAndRadius(rect, Radius.circular(size * 0.1));
+          canvas.drawRRect(rrect, fillPaint);
+          canvas.drawRRect(rrect, strokePaint);
+          break;
+      }
+
+      // Draw structure symbol
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: _getStructureSymbol(placedStructure.template.type),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: hexSize * 0.25,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+
+      textPainter.layout();
+      final textOffset = Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      );
+      textPainter.paint(canvas, textOffset);
     }
   }
 
@@ -624,6 +965,24 @@ class ScenarioBuilderPainter extends CustomPainter {
         return 'K';
       case UnitType.guardian:
         return 'G';
+    }
+  }
+
+  Color _getStructureColor(StructureType type) {
+    switch (type) {
+      case StructureType.bunker:
+        return Colors.brown.shade600;
+      case StructureType.bridge:
+        return Colors.grey.shade400;
+    }
+  }
+
+  String _getStructureSymbol(StructureType type) {
+    switch (type) {
+      case StructureType.bunker:
+        return 'B';
+      case StructureType.bridge:
+        return '=';
     }
   }
 

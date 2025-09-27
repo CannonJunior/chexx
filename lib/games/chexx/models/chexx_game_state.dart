@@ -19,6 +19,7 @@ class SimpleGameUnit {
   final HexCoordinate position;
   final int health;
   final int maxHealth;
+  final int remainingMovement;
   bool isSelected;
 
   SimpleGameUnit({
@@ -28,6 +29,7 @@ class SimpleGameUnit {
     required this.position,
     required this.health,
     required this.maxHealth,
+    required this.remainingMovement,
     this.isSelected = false,
   });
 }
@@ -82,6 +84,9 @@ class ChexxGameState extends GameStateBase {
 
   @override
   void endTurn() {
+    // Reset movement for all units of the next player
+    _resetPlayerMovement();
+
     // Switch players
     currentPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
 
@@ -314,6 +319,7 @@ class ChexxGameState extends GameStateBase {
           position: position,
           health: _getUnitHealth(unitType),
           maxHealth: _getUnitHealth(unitType),
+          remainingMovement: _getUnitMovement(unitType),
         );
 
         simpleUnits.add(unit);
@@ -335,6 +341,7 @@ class ChexxGameState extends GameStateBase {
       position: position,
       health: _getUnitHealth(unitType),
       maxHealth: _getUnitHealth(unitType),
+      remainingMovement: _getUnitMovement(unitType),
     );
   }
 
@@ -452,6 +459,26 @@ class ChexxGameState extends GameStateBase {
       case 'knight': return MovementType.knight;
       case 'guardian': return MovementType.adjacent;
       default: return MovementType.adjacent;
+    }
+  }
+
+  /// Reset movement for all units of the current player
+  void _resetPlayerMovement() {
+    for (int i = 0; i < simpleUnits.length; i++) {
+      final unit = simpleUnits[i];
+      if (unit.owner == currentPlayer) {
+        final resetUnit = SimpleGameUnit(
+          id: unit.id,
+          unitType: unit.unitType,
+          owner: unit.owner,
+          position: unit.position,
+          health: unit.health,
+          maxHealth: unit.maxHealth,
+          remainingMovement: _getUnitMovement(unit.unitType),
+          isSelected: unit.isSelected,
+        );
+        simpleUnits[i] = resetUnit;
+      }
     }
   }
 }

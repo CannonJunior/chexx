@@ -107,6 +107,7 @@ class ChexxGameEngine extends GameEngineBase {
                 position: unitAtPosition.position,
                 health: newHealth,
                 maxHealth: unitAtPosition.maxHealth,
+                remainingMovement: unitAtPosition.remainingMovement,
                 isSelected: unitAtPosition.isSelected,
               );
 
@@ -136,8 +137,8 @@ class ChexxGameEngine extends GameEngineBase {
         final distance = selectedUnit.position.distanceTo(hexCoord);
         final movementRange = _getUnitMovementRange(selectedUnit.unitType);
 
-        if (distance <= movementRange) {
-          // Create new unit with updated position
+        if (distance <= movementRange && selectedUnit.remainingMovement >= distance) {
+          // Create new unit with updated position and reduced movement
           final updatedUnit = SimpleGameUnit(
             id: selectedUnit.id,
             unitType: selectedUnit.unitType,
@@ -145,6 +146,7 @@ class ChexxGameEngine extends GameEngineBase {
             position: hexCoord,
             health: selectedUnit.health,
             maxHealth: selectedUnit.maxHealth,
+            remainingMovement: selectedUnit.remainingMovement - distance,
             isSelected: true,
           );
 
@@ -177,6 +179,7 @@ class ChexxGameEngine extends GameEngineBase {
   }
 
   void _moveSimpleUnit(ChexxGameState gameState, SimpleGameUnit unit, HexCoordinate target) {
+    final distance = unit.position.distanceTo(target);
     // Update unit position (create new unit with updated position)
     final updatedUnit = SimpleGameUnit(
       id: unit.id,
@@ -185,6 +188,7 @@ class ChexxGameEngine extends GameEngineBase {
       position: target,
       health: unit.health,
       maxHealth: unit.maxHealth,
+      remainingMovement: unit.remainingMovement - distance,
       isSelected: unit.isSelected,
     );
 
@@ -209,6 +213,7 @@ class ChexxGameEngine extends GameEngineBase {
         position: target.position,
         health: newHealth,
         maxHealth: target.maxHealth,
+        remainingMovement: target.remainingMovement,
         isSelected: target.isSelected,
       );
 
@@ -227,9 +232,10 @@ class ChexxGameEngine extends GameEngineBase {
   }
 
   bool _isValidMove(SimpleGameUnit unit, HexCoordinate target) {
-    // Simple movement validation - adjacent hexes only for now
+    // Movement validation with remaining movement check
     final distance = unit.position.distanceTo(target);
-    return distance <= 1;
+    final movementRange = _getUnitMovementRange(unit.unitType);
+    return distance <= movementRange && unit.remainingMovement >= distance;
   }
 
   bool _isValidAttack(SimpleGameUnit attacker, SimpleGameUnit target) {
@@ -288,7 +294,7 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   void _drawHexTiles(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Draw a simple hex grid around the center
+    // Draw a simple hex grid around the center (91 hexes total)
     final center = HexCoordinate(0, 0, 0);
     final hexes = HexCoordinate.hexesInRange(center, 5);
 

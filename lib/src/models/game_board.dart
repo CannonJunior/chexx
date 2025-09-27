@@ -21,10 +21,13 @@ class HexTile {
   bool get isNormal => type == HexType.normal;
 }
 
-/// Represents the complete game board with 61 hexes
+/// Represents the complete game board with expandable hexes
 class GameBoard {
   final Map<HexCoordinate, HexTile> tiles = {};
   final List<HexCoordinate> metaHexes = [];
+
+  /// Maximum allowed radius for the board (supports massive scenarios)
+  static const int maxRadius = 40;
 
   GameBoard() {
     _initializeBoard();
@@ -41,9 +44,27 @@ class GameBoard {
     return getTile(coord)?.type ?? HexType.blocked;
   }
 
-  /// Check if coordinate is valid on board
+  /// Check if coordinate is valid on board (within max radius or already exists)
   bool isValidCoordinate(HexCoordinate coord) {
-    return tiles.containsKey(coord);
+    return tiles.containsKey(coord) || _isWithinMaxRadius(coord);
+  }
+
+  /// Check if coordinate is within the maximum allowed radius
+  bool _isWithinMaxRadius(HexCoordinate coord) {
+    final distance = coord.distanceTo(HexCoordinate(0, 0, 0));
+    return distance <= maxRadius;
+  }
+
+  /// Add a new tile at the specified coordinate (if within max radius)
+  void addTile(HexCoordinate coord, HexType type) {
+    if (_isWithinMaxRadius(coord)) {
+      tiles[coord] = HexTile(coordinate: coord, type: type);
+    }
+  }
+
+  /// Remove tile at the specified coordinate
+  void removeTile(HexCoordinate coord) {
+    tiles.remove(coord);
   }
 
   /// Get unit at position
@@ -115,10 +136,17 @@ class GameBoard {
     }
   }
 
-  /// Initialize the 61-hex board layout
+  /// Reset board to default 91-hex layout
+  void resetToDefault() {
+    tiles.clear();
+    metaHexes.clear();
+    _initializeBoard();
+  }
+
+  /// Initialize the 91-hex board layout for scenario building
   void _initializeBoard() {
-    // Create standard 61-hex layout (hexagonal shape with radius 4)
-    final radius = 4;
+    // Create standard 91-hex layout (hexagonal shape with radius 5)
+    final radius = 5;
 
     for (int q = -radius; q <= radius; q++) {
       final r1 = (-radius - q).clamp(-radius, radius);
