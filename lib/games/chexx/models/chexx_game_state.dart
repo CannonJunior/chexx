@@ -294,6 +294,8 @@ class ChexxGameState extends GameStateBase {
         final ownerString = templateData['owner'] as String;
         final unitId = templateData['id'] as String;
 
+        print('Processing unit: type=$unitType, owner=$ownerString, id=$unitId');
+
         // Convert owner string to Player enum
         final owner = ownerString == 'player1' ? Player.player1 : Player.player2;
 
@@ -402,13 +404,15 @@ class ChexxGameState extends GameStateBase {
   }
 
   int _getUnitHealth(String unitType) {
-    switch (unitType) {
-      case 'minor': return 1;
-      case 'scout': return 2;
-      case 'knight': return 3;
-      case 'guardian': return 3;
-      default: return 1;
-    }
+    final health = switch (unitType) {
+      'minor' => 1,
+      'scout' => 2,
+      'knight' => 3,
+      'guardian' => 3,
+      _ => 1,
+    };
+    print('Unit type: "$unitType" -> health: $health');
+    return health;
   }
 
   int _getUnitMovement(String unitType) {

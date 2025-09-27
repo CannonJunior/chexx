@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/engine/game_engine_base.dart';
 import '../../../core/models/hex_coordinate.dart';
+import '../../../core/interfaces/unit_factory.dart';
 import '../chexx_plugin.dart';
 import '../models/chexx_game_state.dart';
 import 'chexx_game_engine.dart';
@@ -96,6 +97,14 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           right: 16,
           child: _buildBottomUI(gameState),
         ),
+
+        // Right side unit info panel
+        if (_getSelectedUnit(gameState) != null)
+          Positioned(
+            top: 80,
+            right: 16,
+            child: _buildUnitInfoPanel(_getSelectedUnit(gameState)!),
+          ),
       ],
     );
   }
@@ -176,6 +185,205 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           child: const Text('Menu'),
         ),
       ],
+    );
+  }
+
+  SimpleGameUnit? _getSelectedUnit(ChexxGameState gameState) {
+    for (final unit in gameState.simpleUnits) {
+      if (unit.isSelected) {
+        return unit;
+      }
+    }
+    return null;
+  }
+
+  Widget _buildUnitInfoPanel(SimpleGameUnit unit) {
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: unit.owner == Player.player1
+            ? Colors.blue.shade900.withOpacity(0.9)
+            : Colors.red.shade900.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: unit.owner == Player.player1
+              ? Colors.blue.shade400
+              : Colors.red.shade400,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Unit Info',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Unit type
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: unit.owner == Player.player1
+                  ? Colors.blue.shade600
+                  : Colors.red.shade600,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              _getUnitTypeName(unit.unitType),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Unit stats
+          _buildStatRow('Health', '${unit.health}/${unit.maxHealth}', Icons.favorite),
+          _buildStatRow('Movement', '${_getMovementRange(unit.unitType)}', Icons.directions_run),
+          _buildStatRow('Attack Range', '${_getAttackRange(unit.unitType)}', Icons.gps_fixed),
+          _buildStatRow('Attack Damage', '${_getAttackDamage(unit.unitType)}', Icons.flash_on),
+
+          const SizedBox(height: 8),
+
+          // Abilities section
+          Text(
+            'Abilities',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          ..._buildUnitAbilities(unit.unitType),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white70, size: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getUnitTypeName(String unitType) {
+    switch (unitType) {
+      case 'minor': return 'Minor Unit';
+      case 'scout': return 'Scout';
+      case 'knight': return 'Knight';
+      case 'guardian': return 'Guardian';
+      default: return 'Unknown';
+    }
+  }
+
+  int _getMovementRange(String unitType) {
+    switch (unitType) {
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  int _getAttackRange(String unitType) {
+    switch (unitType) {
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  int _getAttackDamage(String unitType) {
+    switch (unitType) {
+      case 'minor': return 1;
+      case 'scout': return 1;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  List<Widget> _buildUnitAbilities(String unitType) {
+    switch (unitType) {
+      case 'scout':
+        return [
+          _buildAbilityCard('Long Range', 'Attack range +2'),
+        ];
+      case 'knight':
+        return [
+          _buildAbilityCard('Heavy Attack', 'Deals 2 damage'),
+        ];
+      case 'guardian':
+        return [
+          _buildAbilityCard('Defensive', 'High health unit'),
+        ];
+      case 'minor':
+      default:
+        return [
+          _buildAbilityCard('Basic Unit', 'Standard combat'),
+        ];
+    }
+  }
+
+  Widget _buildAbilityCard(String name, String description) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.yellow,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 9,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

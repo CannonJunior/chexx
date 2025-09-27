@@ -18,6 +18,36 @@ class ChexxGameEngine extends GameEngineBase {
     Map<String, dynamic>? scenarioConfig,
   }) : super(gamePlugin: gamePlugin, scenarioConfig: scenarioConfig);
 
+  int _getUnitAttackRange(String unitType) {
+    switch (unitType) {
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  int _getUnitAttackDamage(String unitType) {
+    switch (unitType) {
+      case 'minor': return 1;
+      case 'scout': return 1;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  int _getUnitMovementRange(String unitType) {
+    switch (unitType) {
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
   @override
   void handleHexTap(HexCoordinate hexCoord) {
     final chexxGameState = gameState as ChexxGameState;
@@ -43,6 +73,53 @@ class ChexxGameEngine extends GameEngineBase {
         // Select this unit
         unitAtPosition.isSelected = true;
         print('Selected unit: ${unitAtPosition.id}');
+      } else {
+        // Enemy unit - try to attack if we have a selected unit
+        SimpleGameUnit? selectedUnit;
+        for (final unit in chexxGameState.simpleUnits) {
+          if (unit.isSelected) {
+            selectedUnit = unit;
+            break;
+          }
+        }
+
+        if (selectedUnit != null) {
+          final distance = selectedUnit.position.distanceTo(hexCoord);
+          final attackRange = _getUnitAttackRange(selectedUnit.unitType);
+
+          if (distance <= attackRange) {
+            // Attack the target unit
+            final damage = _getUnitAttackDamage(selectedUnit.unitType);
+            final newHealth = (unitAtPosition.health - damage).clamp(0, unitAtPosition.maxHealth).toInt();
+
+            print('${selectedUnit.unitType} attacks ${unitAtPosition.unitType} for $damage damage');
+
+            if (newHealth <= 0) {
+              // Remove dead unit
+              chexxGameState.simpleUnits.remove(unitAtPosition);
+              print('${unitAtPosition.unitType} destroyed!');
+            } else {
+              // Update damaged unit
+              final updatedUnit = SimpleGameUnit(
+                id: unitAtPosition.id,
+                unitType: unitAtPosition.unitType,
+                owner: unitAtPosition.owner,
+                position: unitAtPosition.position,
+                health: newHealth,
+                maxHealth: unitAtPosition.maxHealth,
+                isSelected: unitAtPosition.isSelected,
+              );
+
+              final index = chexxGameState.simpleUnits.indexOf(unitAtPosition);
+              if (index != -1) {
+                chexxGameState.simpleUnits[index] = updatedUnit;
+              }
+              print('${unitAtPosition.unitType} health: $newHealth/${unitAtPosition.maxHealth}');
+            }
+          } else {
+            print('Target out of range (distance: $distance, range: $attackRange)');
+          }
+        }
       }
     } else {
       // Try to move selected unit to this position
@@ -55,9 +132,11 @@ class ChexxGameEngine extends GameEngineBase {
       }
 
       if (selectedUnit != null) {
-        // Simple movement validation - adjacent hexes only
+        // Movement validation based on unit type
         final distance = selectedUnit.position.distanceTo(hexCoord);
-        if (distance <= 1) {
+        final movementRange = _getUnitMovementRange(selectedUnit.unitType);
+
+        if (distance <= movementRange) {
           // Create new unit with updated position
           final updatedUnit = SimpleGameUnit(
             id: selectedUnit.id,
@@ -243,17 +322,23 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   void _drawUnits(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Render simple units with basic drawing
+    // Render simple units with type-specific appearance
     for (int i = 0; i < gameState.simpleUnits.length; i++) {
       final unit = gameState.simpleUnits[i];
       final center = engine.hexToScreen(unit.position, size);
 
-      // Simple unit colors
-      final color = (unit.owner == Player.player1) ? Colors.blue : Colors.red;
+      // Unit size based on type
+      final radius = _getUnitRadius(unit.unitType);
+
+      // Base color by owner
+      final baseColor = (unit.owner == Player.player1) ? Colors.blue : Colors.red;
+
+      // Modify color intensity based on unit type
+      final color = _getUnitColor(baseColor, unit.unitType);
       final paint = Paint()..color = color;
 
       // Draw unit as circle
-      canvas.drawCircle(center, 20, paint);
+      canvas.drawCircle(center, radius, paint);
 
       // Draw border if selected
       if (unit.isSelected) {
@@ -261,9 +346,57 @@ class ChexxGamePainter extends CustomPainter {
           ..color = Colors.yellow
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3;
-        canvas.drawCircle(center, 20, borderPaint);
+        canvas.drawCircle(center, radius, borderPaint);
+      }
+
+      // Draw health indicator for units with more than 1 health
+      if (unit.maxHealth > 1) {
+        _drawSimpleHealthIndicator(canvas, center, unit.health, unit.maxHealth, radius);
       }
     }
+  }
+
+  double _getUnitRadius(String unitType) {
+    switch (unitType) {
+      case 'minor': return 15.0;
+      case 'scout': return 18.0;
+      case 'knight': return 22.0;
+      case 'guardian': return 20.0;
+      default: return 15.0;
+    }
+  }
+
+  Color _getUnitColor(Color baseColor, String unitType) {
+    switch (unitType) {
+      case 'minor': return baseColor.withOpacity(0.7);
+      case 'scout': return baseColor.withOpacity(0.9);
+      case 'knight': return baseColor;
+      case 'guardian': return baseColor.withOpacity(0.8);
+      default: return baseColor.withOpacity(0.7);
+    }
+  }
+
+  void _drawSimpleHealthIndicator(Canvas canvas, Offset center, int health, int maxHealth, double radius) {
+    if (health >= maxHealth) return;
+
+    final barWidth = radius * 1.5;
+    final barHeight = 3.0;
+    final barY = center.dy - radius - 8;
+
+    // Background
+    canvas.drawRect(
+      Rect.fromLTWH(center.dx - barWidth / 2, barY, barWidth, barHeight),
+      Paint()..color = Colors.grey.shade700,
+    );
+
+    // Health
+    final healthPercent = health / maxHealth;
+    final healthWidth = barWidth * healthPercent;
+
+    canvas.drawRect(
+      Rect.fromLTWH(center.dx - barWidth / 2, barY, healthWidth, barHeight),
+      Paint()..color = Colors.green.shade600,
+    );
   }
 
   void _drawUnit(Canvas canvas, Size size, Entity entity) {
