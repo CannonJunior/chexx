@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'scenario_builder_state.dart'; // For HexOrientation enum
 
 /// Represents a hexagonal coordinate using the cube coordinate system
 /// where q + r + s = 0, providing symmetrical calculations
@@ -62,17 +63,33 @@ class HexCoordinate {
   }
 
   /// Convert to pixel coordinates for rendering
-  (double, double) toPixel(double size) {
-    final x = size * (3.0 / 2.0 * q);
-    final y = size * (sqrt(3) / 2.0 * q + sqrt(3) * r);
-    return (x, y);
+  (double, double) toPixel(double size, [HexOrientation orientation = HexOrientation.flat]) {
+    if (orientation == HexOrientation.flat) {
+      // Flat-top orientation (original)
+      final x = size * (3.0 / 2.0 * q);
+      final y = size * (sqrt(3) / 2.0 * q + sqrt(3) * r);
+      return (x, y);
+    } else {
+      // Pointy-top orientation
+      final x = size * (sqrt(3) * q + sqrt(3) / 2.0 * r);
+      final y = size * (3.0 / 2.0 * r);
+      return (x, y);
+    }
   }
 
   /// Create hex coordinate from pixel coordinates
-  static HexCoordinate fromPixel(double x, double y, double size) {
-    final q = (2.0 / 3.0 * x) / size;
-    final r = (-1.0 / 3.0 * x + sqrt(3) / 3.0 * y) / size;
-    return _roundHex(q, r, -q - r);
+  static HexCoordinate fromPixel(double x, double y, double size, [HexOrientation orientation = HexOrientation.flat]) {
+    if (orientation == HexOrientation.flat) {
+      // Flat-top orientation (original)
+      final q = (2.0 / 3.0 * x) / size;
+      final r = (-1.0 / 3.0 * x + sqrt(3) / 3.0 * y) / size;
+      return _roundHex(q, r, -q - r);
+    } else {
+      // Pointy-top orientation
+      final q = (sqrt(3) / 3.0 * x - 1.0 / 3.0 * y) / size;
+      final r = (2.0 / 3.0 * y) / size;
+      return _roundHex(q, r, -q - r);
+    }
   }
 
   /// Round fractional hex coordinates to nearest integer coordinates

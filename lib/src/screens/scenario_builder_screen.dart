@@ -588,6 +588,12 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
                     const SizedBox(height: 20),
 
+                    // Unit info card (if unit is selected)
+                    if (builderState.selectedPlacedUnit != null) ...[
+                      _buildUnitInfoCard(builderState.selectedPlacedUnit!),
+                      const SizedBox(height: 20),
+                    ],
+
                     // Instructions
                     const Text(
                       'Instructions:',
@@ -609,7 +615,10 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
                       '• Double-click hex to toggle Meta',
                     ),
                     _buildInstructionItem(
-                      '• Click placed unit to remove it',
+                      '• Click placed unit to view info',
+                    ),
+                    _buildInstructionItem(
+                      '• Click again on selected unit to remove',
                     ),
 
                     const Spacer(),
@@ -719,34 +728,57 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
     // Handle specific type placement/removal based on what's currently selected
     if (builderState.selectedUnitTemplate != null) {
-      // Unit mode: only interact with units
+      // Unit mode: interact with units
       final existingUnit = builderState.getUnitAt(hexCoord);
       if (existingUnit != null) {
-        // Remove existing unit
+        // First click: select unit for info display
+        final placedUnit = builderState.getPlacedUnitAt(hexCoord);
+        if (placedUnit != null && builderState.selectedPlacedUnit != placedUnit) {
+          builderState.selectPlacedUnit(placedUnit);
+          return;
+        }
+        // Second click (or if already selected): remove existing unit
         builderState.removeUnit(hexCoord);
+        builderState.selectPlacedUnit(null); // Clear selection when removing
         return;
       }
-      // Place new unit
+      // Place new unit on empty hex
       builderState.placeItem(hexCoord);
       return;
     }
 
     if (builderState.selectedStructureTemplate != null) {
-      // Structure mode: only interact with structures
+      // Structure mode: prioritize structure interaction, but allow unit selection
       final existingStructure = builderState.getStructureAt(hexCoord);
       if (existingStructure != null) {
         // Remove existing structure
         builderState.removeStructure(hexCoord);
         return;
       }
-      // Place new structure
+
+      // Check for unit selection if no structure at this position
+      final placedUnit = builderState.getPlacedUnitAt(hexCoord);
+      if (placedUnit != null) {
+        builderState.selectPlacedUnit(placedUnit);
+        return;
+      }
+
+      // Place new structure on empty hex
       builderState.placeItem(hexCoord);
       return;
     }
 
     if (builderState.selectedTileType != null) {
-      // Tile mode: place tile or remove if clicking on same type
+      // Tile mode: prioritize tile interaction, but allow unit selection
       final existingTile = builderState.board.getTile(hexCoord);
+
+      // Check for unit selection first (before tile operations)
+      final placedUnit = builderState.getPlacedUnitAt(hexCoord);
+      if (placedUnit != null) {
+        builderState.selectPlacedUnit(placedUnit);
+        return;
+      }
+
       if (existingTile != null && existingTile.type == builderState.selectedTileType) {
         // Clicking on a tile that already has the selected type - remove the entire tile
         builderState.removeTile(hexCoord);
@@ -763,7 +795,15 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       return;
     }
 
-    // If nothing is selected, do nothing
+    // If nothing is selected, check for unit selection
+    final placedUnit = builderState.getPlacedUnitAt(hexCoord);
+    if (placedUnit != null) {
+      // Select the unit for info display
+      builderState.selectPlacedUnit(placedUnit);
+    } else {
+      // Clear selection if clicking on empty space
+      builderState.selectPlacedUnit(null);
+    }
   }
 
   HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {
@@ -773,7 +813,7 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     final gameX = screenPos.dx - centerX;
     final gameY = screenPos.dy - centerY;
 
-    return HexCoordinate.fromPixel(gameX, gameY, hexSize);
+    return HexCoordinate.fromPixel(gameX, gameY, hexSize, builderState.hexOrientation);
   }
 
   String _getUnitSymbol(UnitType type) {
@@ -847,6 +887,381 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         backgroundColor: Colors.green.shade600,
       ),
     );
+  }
+
+  /// Build unit info card for selected placed unit
+  Widget _buildUnitInfoCard(PlacedUnit unit) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: unit.template.owner == Player.player1
+            ? Colors.blue.shade900.withOpacity(0.9)
+            : Colors.red.shade900.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: unit.template.owner == Player.player1
+              ? Colors.blue.shade400
+              : Colors.red.shade400,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Unit Info',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => builderState.selectPlacedUnit(null),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Unit type
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: unit.template.owner == Player.player1
+                  ? Colors.blue.shade600
+                  : Colors.red.shade600,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              _getUnitTypeName(unit.template.type),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Position info
+          _buildInfoRow('Position', '(${unit.position.q}, ${unit.position.r})', Icons.location_on),
+          _buildInfoRow('Owner', unit.template.owner == Player.player1 ? 'Player 1' : 'Player 2', Icons.person),
+
+          const SizedBox(height: 8),
+
+          // Unit stats
+          _buildInfoRow('Health', '${_getUnitMaxHealth(unit.template.type)}', Icons.favorite),
+          _buildInfoRow('Movement', '${_getUnitMovementRange(unit.template.type)}', Icons.directions_run),
+          _buildInfoRow('Attack Range', '${_getUnitAttackRange(unit.template.type)}', Icons.gps_fixed),
+          _buildInfoRow('Attack Damage', '${_getUnitAttackDamage(unit.template.type)}', Icons.flash_on),
+
+          const SizedBox(height: 8),
+
+          // Abilities section
+          const Text(
+            'Abilities',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          ..._buildUnitAbilitiesForBuilder(unit.template.type),
+
+          const SizedBox(height: 12),
+
+          // Parametric Info section (Scenario Builder only)
+          const Text(
+            'Parametric Info',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          ..._buildParametricInfo(unit.template.type),
+        ],
+      ),
+    );
+  }
+
+  /// Build info row for unit info card
+  Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white70, size: 14),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Get unit type name for display
+  String _getUnitTypeName(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 'Minor Unit';
+      case UnitType.scout:
+        return 'Scout';
+      case UnitType.knight:
+        return 'Knight';
+      case UnitType.guardian:
+        return 'Guardian';
+    }
+  }
+
+  /// Get unit max health
+  int _getUnitMaxHealth(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 2;
+      case UnitType.scout:
+        return 2;
+      case UnitType.knight:
+        return 3;
+      case UnitType.guardian:
+        return 3;
+    }
+  }
+
+  /// Get unit movement range
+  int _getUnitMovementRange(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 1;
+      case UnitType.scout:
+        return 3;
+      case UnitType.knight:
+        return 2;
+      case UnitType.guardian:
+        return 1;
+    }
+  }
+
+  /// Get unit attack range
+  int _getUnitAttackRange(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 1;
+      case UnitType.scout:
+        return 3;
+      case UnitType.knight:
+        return 2;
+      case UnitType.guardian:
+        return 1;
+    }
+  }
+
+  /// Get unit attack damage
+  int _getUnitAttackDamage(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 1;
+      case UnitType.scout:
+        return 1;
+      case UnitType.knight:
+        return 2;
+      case UnitType.guardian:
+        return 1;
+    }
+  }
+
+  /// Build unit abilities for scenario builder
+  List<Widget> _buildUnitAbilitiesForBuilder(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.scout:
+        return [
+          _buildAbilityCard('Long Range', 'Attack range +2'),
+        ];
+      case UnitType.knight:
+        return [
+          _buildAbilityCard('Heavy Attack', 'Deals 2 damage'),
+          _buildAbilityCard('L-Shaped Movement', 'Moves in L pattern'),
+        ];
+      case UnitType.guardian:
+        return [
+          _buildAbilityCard('Defensive', 'High health unit'),
+          _buildAbilityCard('Swap', 'Can swap with friendly'),
+        ];
+      case UnitType.minor:
+      default:
+        return [
+          _buildAbilityCard('Basic Unit', 'Standard combat'),
+        ];
+    }
+  }
+
+  /// Build ability card for unit info
+  Widget _buildAbilityCard(String name, String description) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.yellow,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 9,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build parametric info section for scenario builder
+  List<Widget> _buildParametricInfo(UnitType unitType) {
+    return [
+      _buildParametricInfoRow('isIncrementable', _getIsIncrementable(unitType).toString(), Icons.trending_up),
+      _buildParametricInfoRow('Movement Type', _getMovementType(unitType), Icons.navigation),
+      _buildParametricInfoRow('Can Swap', _getCanSwap(unitType).toString(), Icons.swap_horiz),
+      _buildParametricInfoRow('Base Experience', _getBaseExperience(unitType).toString(), Icons.star_outline),
+      _buildParametricInfoRow('Level Cap', _getLevelCap(unitType).toString(), Icons.vertical_align_top),
+    ];
+  }
+
+  /// Build parametric info row
+  Widget _buildParametricInfoRow(String label, String value, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black12,
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.orange.shade300, size: 12),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.orange.shade200,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Get isIncrementable property for unit type
+  bool _getIsIncrementable(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return true;
+      case UnitType.guardian:
+        return true;
+      case UnitType.scout:
+        return false;
+      case UnitType.knight:
+        return false;
+    }
+  }
+
+  /// Get movement type for unit type
+  String _getMovementType(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 'adjacent';
+      case UnitType.scout:
+        return 'straight_line';
+      case UnitType.knight:
+        return 'l_shaped';
+      case UnitType.guardian:
+        return 'adjacent';
+    }
+  }
+
+  /// Get can swap property for unit type
+  bool _getCanSwap(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.guardian:
+        return true;
+      case UnitType.minor:
+      case UnitType.scout:
+      case UnitType.knight:
+        return false;
+    }
+  }
+
+  /// Get base experience for unit type
+  int _getBaseExperience(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 0;
+      case UnitType.scout:
+        return 10;
+      case UnitType.knight:
+        return 15;
+      case UnitType.guardian:
+        return 5;
+    }
+  }
+
+  /// Get level cap for unit type
+  int _getLevelCap(UnitType unitType) {
+    switch (unitType) {
+      case UnitType.minor:
+        return 5;
+      case UnitType.scout:
+        return 3;
+      case UnitType.knight:
+        return 4;
+      case UnitType.guardian:
+        return 6;
+    }
   }
 }
 
@@ -1083,7 +1498,16 @@ class ScenarioBuilderPainter extends CustomPainter {
     final vertices = <Offset>[];
 
     for (int i = 0; i < 6; i++) {
-      final angle = i * 3.14159 / 3;
+      // Calculate hexagon vertices based on orientation
+      double angle;
+      if (state.hexOrientation == HexOrientation.flat) {
+        // Flat-top orientation: first vertex at angle 0 (flat top/bottom)
+        angle = i * pi / 3;
+      } else {
+        // Pointy-top orientation: first vertex at angle π/6 (pointed top/bottom)
+        angle = (i * pi / 3) + (pi / 6);
+      }
+
       final x = center.dx + hexSize * cos(angle);
       final y = center.dy + hexSize * sin(angle);
       vertices.add(Offset(x, y));
@@ -1093,7 +1517,7 @@ class ScenarioBuilderPainter extends CustomPainter {
   }
 
   Offset _hexToScreen(HexCoordinate hex, double centerX, double centerY) {
-    final (x, y) = hex.toPixel(hexSize);
+    final (x, y) = hex.toPixel(hexSize, state.hexOrientation);
     return Offset(centerX + x, centerY + y);
   }
 

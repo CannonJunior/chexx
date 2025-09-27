@@ -6,12 +6,16 @@ import '../models/game_state.dart';
 import '../models/game_unit.dart';
 import '../models/game_board.dart';
 import '../models/meta_ability.dart';
+import '../models/scenario_builder_state.dart'; // For HexOrientation enum
 import '../../core/interfaces/unit_factory.dart';
 
 /// Custom lightweight game engine for CHEXX using Flutter's CustomPainter
 class ChexxGameEngine extends ChangeNotifier {
   late GameState gameState;
   final double hexSize = 50.0;
+
+  // Hexagon orientation setting
+  HexOrientation hexOrientation = HexOrientation.flat;
 
   // Input handling
   HexCoordinate? _hoveredHex;
@@ -126,12 +130,12 @@ class ChexxGameEngine extends ChangeNotifier {
     final gameX = screenPos.dx - centerX;
     final gameY = screenPos.dy - centerY;
 
-    return HexCoordinate.fromPixel(gameX, gameY, hexSize);
+    return HexCoordinate.fromPixel(gameX, gameY, hexSize, hexOrientation);
   }
 
   /// Convert hex coordinate to screen position
   Offset hexToScreen(HexCoordinate hex, Size canvasSize) {
-    final (x, y) = hex.toPixel(hexSize);
+    final (x, y) = hex.toPixel(hexSize, hexOrientation);
 
     final centerX = canvasSize.width / 2;
     final centerY = canvasSize.height / 2;
@@ -157,7 +161,16 @@ class ChexxGameEngine extends ChangeNotifier {
     final vertices = <Offset>[];
 
     for (int i = 0; i < 6; i++) {
-      final angle = i * pi / 3;
+      // Calculate hexagon vertices based on orientation
+      double angle;
+      if (hexOrientation == HexOrientation.flat) {
+        // Flat-top orientation: first vertex at angle 0 (flat top/bottom)
+        angle = i * pi / 3;
+      } else {
+        // Pointy-top orientation: first vertex at angle π/6 (pointed top/bottom)
+        angle = (i * pi / 3) + (pi / 6);
+      }
+
       final x = center.dx + hexSize * cos(angle);
       final y = center.dy + hexSize * sin(angle);
       vertices.add(Offset(x, y));
@@ -196,6 +209,17 @@ class ChexxGameEngine extends ChangeNotifier {
     if (gameState.handleKeyboardMovement(key)) {
       notifyListeners();
     }
+  }
+
+  /// Toggle hexagon orientation between flat and pointy
+  void toggleHexOrientation() {
+    hexOrientation = hexOrientation == HexOrientation.flat
+        ? HexOrientation.pointy
+        : HexOrientation.flat;
+
+    // Clear vertex cache to force recalculation with new orientation
+    _hexVerticesCache.clear();
+    notifyListeners();
   }
 
   @override

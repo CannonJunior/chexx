@@ -6,6 +6,7 @@ import '../../../core/interfaces/unit_factory.dart';
 import '../chexx_plugin.dart';
 import '../models/chexx_game_state.dart';
 import 'chexx_game_engine.dart';
+import '../../../src/models/scenario_builder_state.dart'; // For HexOrientation enum
 
 /// CHEXX game screen implementation
 class ChexxGameScreen extends StatefulWidget {
@@ -228,6 +229,34 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
               color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: 16,
+            ),
+          ),
+        ),
+
+        // Orientation toggle button
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          child: ElevatedButton.icon(
+            onPressed: () => gameEngine.toggleHexOrientation(),
+            icon: Icon(
+              gameEngine.hexOrientation == HexOrientation.flat
+                  ? Icons.hexagon_outlined
+                  : Icons.change_history_outlined,
+              size: 16,
+            ),
+            label: Text(
+              gameEngine.hexOrientation == HexOrientation.flat
+                  ? 'Flat'
+                  : 'Pointy',
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: gameEngine.hexOrientation == HexOrientation.flat
+                  ? Colors.blue.shade600
+                  : Colors.purple.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: const Size(80, 36),
             ),
           ),
         ),

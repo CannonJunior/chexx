@@ -165,6 +165,9 @@ class ScenarioBuilderState extends ChangeNotifier {
   // Hexagon orientation setting
   HexOrientation hexOrientation = HexOrientation.flat;
 
+  // Selected placed unit for info display
+  PlacedUnit? selectedPlacedUnit;
+
   ScenarioBuilderState() {
     _initializeAvailableUnits();
     _initializeAvailableStructures();
@@ -783,5 +786,20 @@ class ScenarioBuilderState extends ChangeNotifier {
         ? HexOrientation.pointy
         : HexOrientation.flat;
     notifyListeners();
+  }
+
+  /// Select a placed unit for info display
+  void selectPlacedUnit(PlacedUnit? unit) {
+    selectedPlacedUnit = unit;
+    notifyListeners();
+  }
+
+  /// Get placed unit at specific position
+  PlacedUnit? getPlacedUnitAt(HexCoordinate position) {
+    try {
+      return placedUnits.firstWhere((unit) => unit.position == position);
+    } catch (e) {
+      return null;
+    }
   }
 }

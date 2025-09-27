@@ -10,9 +10,13 @@ import '../../../core/components/owner_component.dart';
 import '../../../core/components/health_component.dart';
 import '../../../core/components/selection_component.dart';
 import '../models/chexx_game_state.dart';
+import '../../../src/models/scenario_builder_state.dart'; // For HexOrientation enum
 
 /// CHEXX-specific game engine
 class ChexxGameEngine extends GameEngineBase {
+  // Hexagon orientation setting
+  HexOrientation hexOrientation = HexOrientation.flat;
+
   ChexxGameEngine({
     required GamePlugin gamePlugin,
     Map<String, dynamic>? scenarioConfig,
@@ -242,6 +246,14 @@ class ChexxGameEngine extends GameEngineBase {
     // Simple attack validation - adjacent hexes only for now
     final distance = attacker.position.distanceTo(target.position);
     return distance <= 1 && attacker.owner != target.owner;
+  }
+
+  /// Toggle hexagon orientation between flat and pointy
+  void toggleHexOrientation() {
+    hexOrientation = hexOrientation == HexOrientation.flat
+        ? HexOrientation.pointy
+        : HexOrientation.flat;
+    notifyListeners();
   }
 }
 
