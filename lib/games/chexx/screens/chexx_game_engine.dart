@@ -294,9 +294,9 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   void _drawHexTiles(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Draw a simple hex grid around the center (91 hexes total)
-    final center = HexCoordinate(0, 0, 0);
-    final hexes = HexCoordinate.hexesInRange(center, 5);
+    // Draw board tiles from game state (supporting custom scenarios)
+    final hexes = gameState.board.allTiles.map((tile) =>
+      HexCoordinate(tile.coordinate.q, tile.coordinate.r, tile.coordinate.s)).toList();
 
     for (final hex in hexes) {
       final vertices = engine.getHexVertices(hex, size);

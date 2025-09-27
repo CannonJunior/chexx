@@ -50,7 +50,7 @@ check_and_kill_port_8888() {
             print_status "Process command: $process_cmd"
 
             # Kill only the specific process, not related browser processes
-            if [[ "$process_name" != "firefox" ]] && [[ "$process_name" != "chrome" ]] && [[ "$process_name" != "chromium" ]]; then
+            if [[ "$process_name" != "firefox" ]] && [[ "$process_name" != "chrome" ]] && [[ "$process_name" != "chromium" ]] && [[ "$process_name" != "google-chrome" ]]; then
                 print_status "Killing process $pid ($process_name)..."
                 if kill $pid 2>/dev/null; then
                     sleep 2
@@ -178,8 +178,8 @@ flutter doctor || print_warning "Flutter doctor found some issues, but continuin
 # Choose platform
 echo ""
 echo "🚀 Choose launch platform:"
-echo "1) Web (Firefox) - Flutter dev server"
-echo "2) Web (Firefox) - Python HTTP server (if option 1 fails)"
+echo "1) Web (Chrome) - Flutter dev server"
+echo "2) Web (Chrome) - Python HTTP server (if option 1 fails)"
 echo "3) Desktop (Linux)"
 echo "4) Android (if device/emulator connected)"
 echo "5) Check available devices"
@@ -189,7 +189,7 @@ choice=${choice:-1}
 
 case $choice in
     1)
-        print_status "Launching CHEXX on Web (Firefox)..."
+        print_status "Launching CHEXX on Web (Chrome)..."
 
         # First, enable web support and clean any previous builds
         print_status "Enabling Flutter web support..."
@@ -211,8 +211,8 @@ case $choice in
 
         print_success "Web build completed successfully!"
 
-        if command -v firefox &> /dev/null; then
-            print_status "Starting Flutter web server for Firefox..."
+        if command -v google-chrome &> /dev/null; then
+            print_status "Starting Flutter web server for Chrome..."
 
             # Check and kill any process using port 8888
             check_and_kill_port_8888
@@ -238,13 +238,13 @@ case $choice in
                 sleep 2
             done
 
-            print_success "Opening Firefox to http://localhost:8888"
-            firefox http://localhost:8888 &
+            print_success "Opening Chrome to http://localhost:8888"
+            google-chrome http://localhost:8888 &
 
             # Keep the server running
             wait $SERVER_PID
         else
-            print_warning "Firefox not found, using default web browser"
+            print_warning "Chrome not found, using default web browser"
 
             # Check and kill any process using port 8888
             check_and_kill_port_8888

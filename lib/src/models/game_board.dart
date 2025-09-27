@@ -2,7 +2,7 @@ import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import '../../core/interfaces/unit_factory.dart';
 
-enum HexType { normal, meta, blocked }
+enum HexType { normal, meta, blocked, ocean, beach, hill, town, forest, hedgerow }
 
 /// Represents a single hex tile on the game board
 class HexTile {

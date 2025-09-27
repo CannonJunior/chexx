@@ -1,6 +1,6 @@
 import 'package:oxygen/oxygen.dart';
 import '../../../core/models/game_state_base.dart';
-import '../../../core/models/hex_coordinate.dart';
+import '../../../core/models/hex_coordinate.dart' as core_hex;
 import '../../../core/interfaces/unit_factory.dart';
 import '../../../core/components/position_component.dart';
 import '../../../core/components/health_component.dart';
@@ -10,13 +10,15 @@ import '../../../core/components/movement_component.dart';
 import '../../../core/components/combat_component.dart';
 import '../../../core/components/selection_component.dart';
 import '../../../core/models/game_config.dart';
+import '../../../src/models/game_board.dart';
+import '../../../src/models/hex_coordinate.dart';
 
 /// Simple unit representation for temporary use
 class SimpleGameUnit {
   final String id;
   final String unitType;
   final Player owner;
-  final HexCoordinate position;
+  final core_hex.HexCoordinate position;
   final int health;
   final int maxHealth;
   final int remainingMovement;
@@ -40,6 +42,9 @@ class ChexxGameState extends GameStateBase {
   int player1Rewards = 0;
   int player2Rewards = 0;
 
+  // Game board
+  final GameBoard board = GameBoard();
+
   // Temporary: Simple unit storage until ECS is working
   List<SimpleGameUnit> simpleUnits = [];
 
@@ -53,6 +58,7 @@ class ChexxGameState extends GameStateBase {
   @override
   void initializeFromScenario(Map<String, dynamic> scenarioConfig) {
     gamePhase = GamePhase.playing;
+    _loadBoardTilesFromScenario(scenarioConfig);
     _loadUnitsFromScenario(scenarioConfig);
     _calculateAvailableActions();
   }
@@ -157,7 +163,7 @@ class ChexxGameState extends GameStateBase {
   }
 
   @override
-  bool moveEntity(HexCoordinate target) {
+  bool moveEntity(core_hex.HexCoordinate target) {
     if (selectedEntity == null) return false;
 
     final position = selectedEntity!.get<PositionComponent>();
@@ -173,7 +179,7 @@ class ChexxGameState extends GameStateBase {
   }
 
   @override
-  bool attackPosition(HexCoordinate target) {
+  bool attackPosition(core_hex.HexCoordinate target) {
     if (selectedEntity == null) return false;
 
     if (availableAttacks.contains(target)) {
@@ -213,7 +219,7 @@ class ChexxGameState extends GameStateBase {
   }
 
   @override
-  Entity? getEntityAt(HexCoordinate coordinate) {
+  Entity? getEntityAt(core_hex.HexCoordinate coordinate) {
     // TODO: Fix world.query for Oxygen 0.3.1 API
     // final query = world.query([Has<PositionComponent>()]);
     // for (final entity in query.entities) {
@@ -240,7 +246,7 @@ class ChexxGameState extends GameStateBase {
   }
 
   @override
-  List<Entity> getEntitiesAt(HexCoordinate position) {
+  List<Entity> getEntitiesAt(core_hex.HexCoordinate position) {
     final entities = <Entity>[];
     // TODO: Fix world.query for Oxygen 0.3.1 API
     // final query = world.query([Has<PositionComponent>()]);
@@ -259,18 +265,18 @@ class ChexxGameState extends GameStateBase {
     simpleUnits.clear();
 
     // Player 1 units (bottom)
-    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const HexCoordinate(-2, 2, 0)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const HexCoordinate(-1, 2, -1)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const HexCoordinate(0, 2, -2)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const HexCoordinate(1, 2, -3)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const HexCoordinate(2, 2, -4)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const core_hex.HexCoordinate(-2, 2, 0)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const core_hex.HexCoordinate(-1, 2, -1)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const core_hex.HexCoordinate(0, 2, -2)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const core_hex.HexCoordinate(1, 2, -3)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player1, const core_hex.HexCoordinate(2, 2, -4)));
 
     // Player 2 units (top)
-    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const HexCoordinate(-2, -2, 4)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const HexCoordinate(-1, -2, 3)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const HexCoordinate(0, -2, 2)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const HexCoordinate(1, -2, 1)));
-    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const HexCoordinate(2, -2, 0)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const core_hex.HexCoordinate(-2, -2, 4)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const core_hex.HexCoordinate(-1, -2, 3)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const core_hex.HexCoordinate(0, -2, 2)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const core_hex.HexCoordinate(1, -2, 1)));
+    simpleUnits.add(_createSimpleUnit('minor', Player.player2, const core_hex.HexCoordinate(2, -2, 0)));
 
     print('Created ${simpleUnits.length} simple units');
   }
@@ -305,7 +311,7 @@ class ChexxGameState extends GameStateBase {
         final owner = ownerString == 'player1' ? Player.player1 : Player.player2;
 
         // Create hex coordinate
-        final position = HexCoordinate(
+        final position = core_hex.HexCoordinate(
           positionData['q'] as int,
           positionData['r'] as int,
           positionData['s'] as int,
@@ -332,8 +338,57 @@ class ChexxGameState extends GameStateBase {
     print('Successfully loaded ${simpleUnits.length} units from scenario');
   }
 
+  /// Load board tiles from scenario configuration
+  void _loadBoardTilesFromScenario(Map<String, dynamic> scenarioConfig) {
+    // Load board tiles (if saved in scenario)
+    if (scenarioConfig.containsKey('board_tiles')) {
+      // Clear the default board and load custom board state
+      board.tiles.clear();
+
+      final boardTiles = scenarioConfig['board_tiles'] as List<dynamic>;
+      print('Loading ${boardTiles.length} board tiles from scenario');
+
+      for (final tileData in boardTiles) {
+        try {
+          final tile = tileData as Map<String, dynamic>;
+          // Create board HexCoordinate (src/models version)
+          final coord = HexCoordinate(
+            tile['q'] as int,
+            tile['r'] as int,
+            tile['s'] as int,
+          );
+
+          final typeString = tile['type'] as String;
+          final tileType = HexType.values.firstWhere(
+            (e) => e.toString().split('.').last == typeString,
+            orElse: () => HexType.normal,
+          );
+
+          board.addTile(coord, tileType);
+        } catch (e) {
+          print('Error loading board tile: $e');
+        }
+      }
+
+      print('Successfully loaded ${board.allTiles.length} board tiles from scenario');
+    } else {
+      print('No board_tiles found in scenario, using default board');
+      // Keep the default board initialized by GameBoard constructor
+    }
+  }
+
+  /// Convert core HexCoordinate to board HexCoordinate
+  HexCoordinate _convertCoreToBoard(core_hex.HexCoordinate coreHex) {
+    return HexCoordinate(coreHex.q, coreHex.r, coreHex.s);
+  }
+
+  /// Convert board HexCoordinate to core HexCoordinate
+  core_hex.HexCoordinate _convertBoardToCore(HexCoordinate boardHex) {
+    return core_hex.HexCoordinate(boardHex.q, boardHex.r, boardHex.s);
+  }
+
   /// Create a simple unit (temporary until ECS is working)
-  SimpleGameUnit _createSimpleUnit(String unitType, Player owner, HexCoordinate position) {
+  SimpleGameUnit _createSimpleUnit(String unitType, Player owner, core_hex.HexCoordinate position) {
     return SimpleGameUnit(
       id: '${unitType}_${owner.name}_${position.q}_${position.r}_${position.s}',
       unitType: unitType,
@@ -369,7 +424,7 @@ class ChexxGameState extends GameStateBase {
     // Calculate available moves
     if (movement != null && movement.canMove) {
       final range = movement.remainingMovement;
-      final possibleMoves = HexCoordinate.hexesInRange(position.coordinate, range);
+      final possibleMoves = core_hex.HexCoordinate.hexesInRange(position.coordinate, range);
 
       for (final target in possibleMoves) {
         if (target != position.coordinate && getEntityAt(target) == null) {
@@ -382,7 +437,7 @@ class ChexxGameState extends GameStateBase {
     // Calculate available attacks
     if (combat != null && combat.canAttack) {
       final range = combat.attackRange;
-      final possibleTargets = HexCoordinate.hexesInRange(position.coordinate, range);
+      final possibleTargets = core_hex.HexCoordinate.hexesInRange(position.coordinate, range);
 
       for (final target in possibleTargets) {
         final targetEntity = getEntityAt(target);

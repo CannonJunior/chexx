@@ -214,6 +214,12 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
             _buildTileTypeButton(HexType.normal, 'Normal', Colors.green.shade200),
             _buildTileTypeButton(HexType.meta, 'Meta', Colors.purple.shade300),
             _buildTileTypeButton(HexType.blocked, 'Blocked', Colors.grey.shade600),
+            _buildTileTypeButton(HexType.ocean, 'Ocean', Colors.blue.shade300),
+            _buildTileTypeButton(HexType.beach, 'Beach', Colors.amber.shade200),
+            _buildTileTypeButton(HexType.hill, 'Hill', Colors.brown.shade300),
+            _buildTileTypeButton(HexType.town, 'Town', Colors.grey.shade400),
+            _buildTileTypeButton(HexType.forest, 'Forest', Colors.green.shade600),
+            _buildTileTypeButton(HexType.hedgerow, 'Hedgerow', Colors.green.shade800),
             _buildSpecialModeButton('Create New', Colors.blue.shade300, isCreateNew: true),
             _buildSpecialModeButton('Remove', Colors.red.shade400, isRemove: true),
           ],
@@ -380,6 +386,18 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         return Icons.star;
       case HexType.blocked:
         return Icons.block;
+      case HexType.ocean:
+        return Icons.water;
+      case HexType.beach:
+        return Icons.beach_access;
+      case HexType.hill:
+        return Icons.terrain;
+      case HexType.town:
+        return Icons.location_city;
+      case HexType.forest:
+        return Icons.park;
+      case HexType.hedgerow:
+        return Icons.grass;
     }
   }
 
@@ -389,6 +407,12 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         return Icons.security; // Shield icon for bunker
       case StructureType.bridge:
         return Icons.horizontal_rule; // Horizontal line for bridge
+      case StructureType.sandbag:
+        return Icons.fence; // Fence icon for sandbags
+      case StructureType.barbwire:
+        return Icons.grain; // Wire-like icon for barbwire
+      case StructureType.dragonsTeeth:
+        return Icons.change_history; // Triangle icon for dragon's teeth
     }
   }
 
@@ -398,6 +422,12 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         return Colors.brown.shade600; // Brown for bunker
       case StructureType.bridge:
         return Colors.grey.shade400; // Grey for bridge
+      case StructureType.sandbag:
+        return Colors.brown.shade300; // Light brown for sandbags
+      case StructureType.barbwire:
+        return Colors.grey.shade700; // Dark grey for barbwire
+      case StructureType.dragonsTeeth:
+        return Colors.grey.shade600; // Medium grey for dragon's teeth
     }
   }
 
@@ -407,6 +437,12 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         return 'Bunker';
       case StructureType.bridge:
         return 'Bridge';
+      case StructureType.sandbag:
+        return 'Sandbag';
+      case StructureType.barbwire:
+        return 'Barbwire';
+      case StructureType.dragonsTeeth:
+        return 'Dragon\'s Teeth';
     }
   }
 
@@ -633,22 +669,55 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     final hexCoord = _screenToHex(adjustedPosition, renderBox.size);
     if (hexCoord == null) return;
 
-    // Check if there's already a unit at this position
-    final existingUnit = builderState.getUnitAt(hexCoord);
-    if (existingUnit != null) {
-      // Remove existing unit
+    // Handle removal mode - removes everything from the hex
+    if (builderState.isRemoveMode) {
       builderState.removeUnit(hexCoord);
+      builderState.removeStructure(hexCoord);
+      // Note: Don't remove tile type, only clear units and structures
       return;
     }
 
-    // If nothing selected, do nothing
-    if (builderState.selectedUnitTemplate == null &&
-        builderState.selectedTileType == null &&
-        !builderState.isCreateNewMode &&
-        !builderState.isRemoveMode) return;
+    // Handle specific type placement/removal based on what's currently selected
+    if (builderState.selectedUnitTemplate != null) {
+      // Unit mode: only interact with units
+      final existingUnit = builderState.getUnitAt(hexCoord);
+      if (existingUnit != null) {
+        // Remove existing unit
+        builderState.removeUnit(hexCoord);
+        return;
+      }
+      // Place new unit
+      builderState.placeItem(hexCoord);
+      return;
+    }
 
-    // Place unit or tile type
-    builderState.placeItem(hexCoord);
+    if (builderState.selectedStructureTemplate != null) {
+      // Structure mode: only interact with structures
+      final existingStructure = builderState.getStructureAt(hexCoord);
+      if (existingStructure != null) {
+        // Remove existing structure
+        builderState.removeStructure(hexCoord);
+        return;
+      }
+      // Place new structure
+      builderState.placeItem(hexCoord);
+      return;
+    }
+
+    if (builderState.selectedTileType != null) {
+      // Tile mode: only interact with tile types
+      // Place or change tile type
+      builderState.placeItem(hexCoord);
+      return;
+    }
+
+    if (builderState.isCreateNewMode) {
+      // Create new hex mode
+      builderState.placeItem(hexCoord);
+      return;
+    }
+
+    // If nothing is selected, do nothing
   }
 
   HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {
@@ -758,14 +827,6 @@ class ScenarioBuilderPainter extends CustomPainter {
   }
 
   void _drawHexTiles(Canvas canvas, Size size, double centerX, double centerY) {
-    final normalPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.lightGreen.shade100;
-
-    final metaPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.purple.shade200;
-
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
@@ -800,8 +861,10 @@ class ScenarioBuilderPainter extends CustomPainter {
         Paint fillPaint;
 
         if (existingTile != null) {
-          // Existing tile - use appropriate color
-          fillPaint = state.isMetaHex(coord) ? metaPaint : normalPaint;
+          // Existing tile - use appropriate color based on tile type
+          fillPaint = Paint()
+            ..style = PaintingStyle.fill
+            ..color = _getTileTypeColor(existingTile.type);
         } else {
           // Empty grid space - use subtle background
           fillPaint = Paint()
@@ -837,7 +900,7 @@ class ScenarioBuilderPainter extends CustomPainter {
   void _drawPlacedStructures(Canvas canvas, Size size, double centerX, double centerY) {
     for (final placedStructure in state.placedStructures) {
       final center = _hexToScreen(placedStructure.position, centerX, centerY);
-      final size = hexSize * 0.6;
+      final size = hexSize * 0.9; // Increased from 0.6 to 0.9 to be visible under units
 
       // Structure colors based on type
       final Color structureColor = _getStructureColor(placedStructure.template.type);
@@ -865,6 +928,39 @@ class ScenarioBuilderPainter extends CustomPainter {
           final rrect = RRect.fromRectAndRadius(rect, Radius.circular(size * 0.1));
           canvas.drawRRect(rrect, fillPaint);
           canvas.drawRRect(rrect, strokePaint);
+          break;
+        case StructureType.sandbag:
+          // Draw sandbag as multiple small circles
+          final radius = size * 0.15;
+          for (int i = 0; i < 3; i++) {
+            final offset = Offset(center.dx + (i - 1) * radius, center.dy);
+            canvas.drawCircle(offset, radius, fillPaint);
+            canvas.drawCircle(offset, radius, strokePaint);
+          }
+          break;
+        case StructureType.barbwire:
+          // Draw barbwire as zigzag lines
+          final path = Path();
+          final halfSize = size * 0.5;
+          path.moveTo(center.dx - halfSize, center.dy);
+          for (int i = 0; i < 4; i++) {
+            final x = center.dx - halfSize + (i * halfSize / 2);
+            final y = center.dy + ((i % 2 == 0) ? -halfSize * 0.3 : halfSize * 0.3);
+            path.lineTo(x, y);
+          }
+          path.lineTo(center.dx + halfSize, center.dy);
+          canvas.drawPath(path, strokePaint);
+          break;
+        case StructureType.dragonsTeeth:
+          // Draw dragon's teeth as triangles
+          final path = Path();
+          final halfSize = size * 0.4;
+          path.moveTo(center.dx, center.dy - halfSize);
+          path.lineTo(center.dx - halfSize, center.dy + halfSize);
+          path.lineTo(center.dx + halfSize, center.dy + halfSize);
+          path.close();
+          canvas.drawPath(path, fillPaint);
+          canvas.drawPath(path, strokePaint);
           break;
       }
 
@@ -974,6 +1070,12 @@ class ScenarioBuilderPainter extends CustomPainter {
         return Colors.brown.shade600;
       case StructureType.bridge:
         return Colors.grey.shade400;
+      case StructureType.sandbag:
+        return Colors.brown.shade300;
+      case StructureType.barbwire:
+        return Colors.grey.shade700;
+      case StructureType.dragonsTeeth:
+        return Colors.grey.shade600;
     }
   }
 
@@ -983,6 +1085,35 @@ class ScenarioBuilderPainter extends CustomPainter {
         return 'B';
       case StructureType.bridge:
         return '=';
+      case StructureType.sandbag:
+        return 'S';
+      case StructureType.barbwire:
+        return 'W';
+      case StructureType.dragonsTeeth:
+        return 'T';
+    }
+  }
+
+  Color _getTileTypeColor(HexType type) {
+    switch (type) {
+      case HexType.normal:
+        return Colors.lightGreen.shade100;
+      case HexType.meta:
+        return Colors.purple.shade200;
+      case HexType.blocked:
+        return Colors.grey.shade600;
+      case HexType.ocean:
+        return Colors.blue.shade300;
+      case HexType.beach:
+        return Colors.amber.shade200;
+      case HexType.hill:
+        return Colors.brown.shade300;
+      case HexType.town:
+        return Colors.grey.shade400;
+      case HexType.forest:
+        return Colors.green.shade600;
+      case HexType.hedgerow:
+        return Colors.green.shade800;
     }
   }
 

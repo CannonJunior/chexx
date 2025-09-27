@@ -9,6 +9,9 @@ import '../../core/interfaces/unit_factory.dart';
 enum StructureType {
   bunker,
   bridge,
+  sandbag,
+  barbwire,
+  dragonsTeeth,
 }
 
 /// Represents a structure template in the scenario builder
@@ -188,6 +191,9 @@ class ScenarioBuilderState extends ChangeNotifier {
     availableStructures.addAll([
       const StructureTemplate(type: StructureType.bunker, id: 'bunker_structure'),
       const StructureTemplate(type: StructureType.bridge, id: 'bridge_structure'),
+      const StructureTemplate(type: StructureType.sandbag, id: 'sandbag_structure'),
+      const StructureTemplate(type: StructureType.barbwire, id: 'barbwire_structure'),
+      const StructureTemplate(type: StructureType.dragonsTeeth, id: 'dragons_teeth_structure'),
     ]);
   }
 
@@ -355,17 +361,23 @@ class ScenarioBuilderState extends ChangeNotifier {
     return true;
   }
 
-  /// Remove tile at the specified position
+  /// Remove the entire tile and everything on it (use sparingly)
   bool _removeTile(HexCoordinate position) {
     final tile = board.getTile(position);
     if (tile != null) {
       board.removeTile(position);
       metaHexes.remove(position);
 
-      // Also remove any units at this position
+      // Remove all units at this position (only when removing entire tile)
       final unitsToRemove = placedUnits.where((unit) => unit.position == position).toList();
       for (final unit in unitsToRemove) {
         placedUnits.remove(unit);
+      }
+
+      // Remove all structures at this position (only when removing entire tile)
+      final structuresToRemove = placedStructures.where((structure) => structure.position == position).toList();
+      for (final structure in structuresToRemove) {
+        placedStructures.remove(structure);
       }
 
       notifyListeners();
@@ -385,6 +397,18 @@ class ScenarioBuilderState extends ChangeNotifier {
     final unitToRemove = unitsToRemove.isNotEmpty ? unitsToRemove.first : null;
     if (unitToRemove != null) {
       placedUnits.remove(unitToRemove);
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  /// Remove structure at position
+  bool removeStructure(HexCoordinate position) {
+    final structuresToRemove = placedStructures.where((structure) => structure.position == position).toList();
+    final structureToRemove = structuresToRemove.isNotEmpty ? structuresToRemove.first : null;
+    if (structureToRemove != null) {
+      placedStructures.remove(structureToRemove);
       notifyListeners();
       return true;
     }

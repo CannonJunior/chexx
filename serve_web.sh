@@ -40,7 +40,7 @@ check_and_kill_port_8888() {
             print_status "Process command: $process_cmd"
 
             # Kill only the specific process, not related browser processes
-            if [[ "$process_name" != "firefox" ]] && [[ "$process_name" != "chrome" ]] && [[ "$process_name" != "chromium" ]]; then
+            if [[ "$process_name" != "firefox" ]] && [[ "$process_name" != "chrome" ]] && [[ "$process_name" != "chromium" ]] && [[ "$process_name" != "google-chrome" ]]; then
                 print_status "Killing process $pid ($process_name)..."
                 if kill $pid 2>/dev/null; then
                     sleep 2
@@ -107,12 +107,12 @@ if command -v python3 &> /dev/null; then
     # Wait a moment for server to start
     sleep 2
 
-    # Open Firefox if available
-    if command -v firefox &> /dev/null; then
-        print_success "Opening Firefox..."
-        firefox http://localhost:8888 > /dev/null 2>&1 &
+    # Open Chrome if available
+    if command -v google-chrome &> /dev/null; then
+        print_success "Opening Chrome..."
+        google-chrome http://localhost:8888 > /dev/null 2>&1 &
     else
-        print_status "Firefox not found. Open http://localhost:8888 in your browser"
+        print_status "Chrome not found. Open http://localhost:8888 in your browser"
     fi
 
     # Wait for server process
