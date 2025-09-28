@@ -1,4 +1,5 @@
 import 'hex_coordinate.dart';
+import 'unit_type_config.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 /// Level bonuses for units
@@ -28,15 +29,13 @@ class LevelBonuses {
   }
 }
 
-enum UnitType { minor, scout, knight, guardian }
-
-
 enum UnitState { idle, selected, moving, attacking, dead }
 
 /// Represents a game unit with position, stats, and abilities
 class GameUnit {
   final String id;
-  final UnitType type;
+  final String unitTypeId;
+  final UnitTypeConfig config;
   final Player owner;
   HexCoordinate position;
   UnitState state;
@@ -54,14 +53,16 @@ class GameUnit {
 
   GameUnit({
     required this.id,
-    required this.type,
+    required this.unitTypeId,
+    required this.config,
     required this.owner,
     required this.position,
     this.state = UnitState.idle,
-    required this.maxHealth,
+    int? customHealth,
     this.level = 1,
     this.experience = 0,
-  }) : currentHealth = maxHealth,
+  }) : maxHealth = customHealth ?? config.health,
+       currentHealth = customHealth ?? config.health,
        abilityCooldowns = {},
        statusEffects = {};
 
@@ -74,47 +75,14 @@ class GameUnit {
   /// Check if unit can attack
   bool get canAttack => isAlive && state != UnitState.dead;
 
-  /// Get movement range based on unit type
-  int get movementRange {
-    switch (type) {
-      case UnitType.minor:
-        return 1;
-      case UnitType.scout:
-        return 3;
-      case UnitType.knight:
-        return 2;
-      case UnitType.guardian:
-        return 1;
-    }
-  }
+  /// Get movement range based on unit configuration
+  int get movementRange => config.movementRange;
 
-  /// Get attack range based on unit type
-  int get attackRange {
-    switch (type) {
-      case UnitType.minor:
-        return 1;
-      case UnitType.scout:
-        return 3;
-      case UnitType.knight:
-        return 2;
-      case UnitType.guardian:
-        return 1;
-    }
-  }
+  /// Get attack range based on unit configuration
+  int get attackRange => config.attackRange;
 
-  /// Get attack damage based on unit type
-  int get attackDamage {
-    switch (type) {
-      case UnitType.minor:
-        return 1;
-      case UnitType.scout:
-        return 1;
-      case UnitType.knight:
-        return 2;
-      case UnitType.guardian:
-        return 1;
-    }
-  }
+  /// Get attack damage based on unit configuration
+  int get attackDamage => config.attackDamage;
 
   /// Check if unit can move to target position
   bool canMoveTo(HexCoordinate target, List<GameUnit> allUnits) {
@@ -270,18 +238,17 @@ class GameUnit {
 
   /// Validate movement path based on unit type
   bool _isValidMovementPath(HexCoordinate target) {
-    switch (type) {
-      case UnitType.minor:
-      case UnitType.guardian:
+    switch (config.movementType) {
+      case 'adjacent':
         return true; // Can move to any hex in range
 
-      case UnitType.scout:
-        // Scout moves in straight lines only
+      case 'straight_line':
+        // Moves in straight lines only
         final diff = target - position;
         return diff.q == 0 || diff.r == 0 || diff.s == 0;
 
-      case UnitType.knight:
-        // Knight moves in L-shape pattern
+      case 'l_shaped':
+        // L-shape pattern movement
         final distance = position.distanceTo(target);
         if (distance > 2) return false;
 
@@ -289,16 +256,25 @@ class GameUnit {
         final diff = target - position;
         final isStraightLine = diff.q == 0 || diff.r == 0 || diff.s == 0;
         return distance == 2 && !isStraightLine;
+
+      default:
+        return true; // Default to adjacent movement
     }
   }
 
   /// Check if unit has special abilities available
   bool canUseSpecialAbility(String abilityName) {
-    switch (type) {
-      case UnitType.guardian:
+    if (config.special == null) return false;
+
+    // Check if the special ability matches what this unit has
+    final specialAbility = config.special!['special'] as String?;
+    if (specialAbility == null) return false;
+
+    switch (specialAbility) {
+      case 'can_swap_with_friendly':
         return abilityName == 'swap' && !isAbilityOnCooldown('swap');
-      case UnitType.scout:
-        return abilityName == 'long_range_scan' && !isAbilityOnCooldown('long_range_scan');
+      case 'indirect_fire':
+        return abilityName == 'indirect_fire' && !isAbilityOnCooldown('indirect_fire');
       default:
         return false;
     }
@@ -308,15 +284,19 @@ class GameUnit {
   bool useSpecialAbility(String abilityName, HexCoordinate? target, List<GameUnit> allUnits) {
     if (!canUseSpecialAbility(abilityName)) return false;
 
-    switch (type) {
-      case UnitType.guardian:
+    if (config.special == null) return false;
+    final specialAbility = config.special!['special'] as String?;
+    if (specialAbility == null) return false;
+
+    switch (specialAbility) {
+      case 'can_swap_with_friendly':
         if (abilityName == 'swap' && target != null) {
           return _performSwapAbility(target, allUnits);
         }
         break;
-      case UnitType.scout:
-        if (abilityName == 'long_range_scan') {
-          return _performLongRangeScan(allUnits);
+      case 'indirect_fire':
+        if (abilityName == 'indirect_fire') {
+          return _performIndirectFire(target, allUnits);
         }
         break;
       default:
@@ -344,6 +324,30 @@ class GameUnit {
     return true;
   }
 
+  /// Artillery indirect fire - can attack over obstacles
+  bool _performIndirectFire(HexCoordinate? target, List<GameUnit> allUnits) {
+    if (target == null) return false;
+
+    final distance = position.distanceTo(target);
+    if (distance > attackRange) return false;
+
+    // Find target unit at position
+    final targetUnits = allUnits.where((u) =>
+        u.isAlive && u.position == target && u.owner != owner).toList();
+    final targetUnit = targetUnits.isNotEmpty ? targetUnits.first : null;
+
+    if (targetUnit != null) {
+      // Deal damage to target
+      targetUnit.takeDamage(effectiveAttackDamage);
+
+      // Set cooldown for indirect fire
+      useAbility('indirect_fire', 2);
+      return true;
+    }
+
+    return false;
+  }
+
   /// Scout long range scan - reveals enemy positions and weaknesses
   bool _performLongRangeScan(List<GameUnit> allUnits) {
     // Grant temporary vision boost and mark nearby enemies
@@ -360,29 +364,6 @@ class GameUnit {
     return true;
   }
 
-  /// Create unit from type
-  static GameUnit create({
-    required String id,
-    required UnitType type,
-    required Player owner,
-    required HexCoordinate position,
-  }) {
-    final health = switch (type) {
-      UnitType.minor => 1,
-      UnitType.scout => 2,
-      UnitType.knight => 3,
-      UnitType.guardian => 3,
-    };
-
-    return GameUnit(
-      id: id,
-      type: type,
-      owner: owner,
-      position: position,
-      maxHealth: health,
-    );
-  }
-
   @override
-  String toString() => 'GameUnit($id, $type, $owner, $position, HP:$currentHealth/$maxHealth)';
+  String toString() => 'GameUnit($id, $unitTypeId, $owner, $position, HP:$currentHealth/$maxHealth)';
 }

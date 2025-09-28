@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
+import 'game_state.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 /// Enumeration of hexagon orientations
@@ -112,10 +113,12 @@ class PlacedStructure {
 class PlacedUnit {
   final UnitTemplate template;
   final HexCoordinate position;
+  final int? customHealth; // Custom health for scenario builder, null uses default
 
   const PlacedUnit({
     required this.template,
     required this.position,
+    this.customHealth,
   });
 
   Map<String, dynamic> toJson() {
@@ -126,6 +129,7 @@ class PlacedUnit {
         'r': position.r,
         's': position.s,
       },
+      if (customHealth != null) 'customHealth': customHealth,
     };
   }
 
@@ -138,6 +142,7 @@ class PlacedUnit {
         positionData['r'] as int,
         positionData['s'] as int,
       ),
+      customHealth: json['customHealth'] as int?,
     );
   }
 }
@@ -291,6 +296,20 @@ class ScenarioBuilderState extends ChangeNotifier {
     return success;
   }
 
+  /// Check if a unit type is incrementable
+  bool _isIncrementableType(UnitType type) {
+    switch (type) {
+      case UnitType.minor:
+        return true;
+      case UnitType.guardian:
+        return true;
+      case UnitType.scout:
+        return false;
+      case UnitType.knight:
+        return false;
+    }
+  }
+
   /// Place a unit at the specified position
   bool _placeUnit(HexCoordinate position) {
     if (selectedUnitTemplate == null) return false;
@@ -303,9 +322,13 @@ class ScenarioBuilderState extends ChangeNotifier {
       placedUnits.remove(existingUnit);
     }
 
+    // Set health to 1 for incrementable units (minor and guardian)
+    final customHealth = _isIncrementableType(selectedUnitTemplate!.type) ? 1 : null;
+
     placedUnits.add(PlacedUnit(
       template: selectedUnitTemplate!,
       position: position,
+      customHealth: customHealth,
     ));
 
     notifyListeners();

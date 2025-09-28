@@ -532,16 +532,7 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   String _getUnitSymbol(GameUnit unit) {
-    switch (unit.type) {
-      case UnitType.minor:
-        return 'M';
-      case UnitType.scout:
-        return 'S';
-      case UnitType.knight:
-        return 'K';
-      case UnitType.guardian:
-        return 'G';
-    }
+    return unit.config.symbol;
   }
 
   @override

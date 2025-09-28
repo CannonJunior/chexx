@@ -3,11 +3,15 @@ import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
 import 'meta_ability.dart';
+import 'unit_type_config.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 enum GamePhase { setup, playing, gameOver }
 
 enum TurnPhase { moving, acting, ended }
+
+// Compatibility enum for the old UnitType system
+enum UnitType { minor, scout, knight, guardian }
 
 /// Represents the complete state of the game
 class GameState extends ChangeNotifier {
@@ -42,6 +46,9 @@ class GameState extends ChangeNotifier {
   // Rewards system
   int player1Rewards;
   int player2Rewards;
+
+  // Unit type system
+  UnitTypeSet? unitTypeSet;
 
   GameState()
       : board = GameBoard(),
@@ -102,7 +109,7 @@ class GameState extends ChangeNotifier {
         position['s'] as int,
       );
 
-      units.add(GameUnit.create(
+      units.add(createUnit(
         id: template['id'] as String,
         type: unitType,
         owner: owner,
@@ -128,7 +135,7 @@ class GameState extends ChangeNotifier {
     // Back row: 3 major units (simplified from 5)
     final majorUnits1 = [UnitType.scout, UnitType.knight, UnitType.guardian];
     for (int i = 0; i < majorUnits1.length; i++) {
-      units.add(GameUnit.create(
+      units.add(createUnit(
         id: 'p1_major_$i',
         type: majorUnits1[i],
         owner: Player.player1,
@@ -138,7 +145,7 @@ class GameState extends ChangeNotifier {
 
     // Front row: 6 minor units
     for (int i = 0; i < 6; i++) {
-      units.add(GameUnit.create(
+      units.add(createUnit(
         id: 'p1_minor_$i',
         type: UnitType.minor,
         owner: Player.player1,
@@ -151,7 +158,7 @@ class GameState extends ChangeNotifier {
 
     // Front row: 6 minor units
     for (int i = 0; i < 6; i++) {
-      units.add(GameUnit.create(
+      units.add(createUnit(
         id: 'p2_minor_$i',
         type: UnitType.minor,
         owner: Player.player2,
@@ -162,7 +169,7 @@ class GameState extends ChangeNotifier {
     // Back row: 3 major units
     final majorUnits2 = [UnitType.scout, UnitType.knight, UnitType.guardian];
     for (int i = 0; i < majorUnits2.length; i++) {
-      units.add(GameUnit.create(
+      units.add(createUnit(
         id: 'p2_major_$i',
         type: majorUnits2[i],
         owner: Player.player2,
@@ -238,7 +245,7 @@ class GameState extends ChangeNotifier {
     if (!selectedUnit!.canMoveTo(nextPosition, units)) return false;
 
     // Check if unit type allows this movement pattern
-    if (!_isValidKeyboardMovementForUnitType(originalPosition!, nextPosition, selectedUnit!.type)) {
+    if (!_isValidKeyboardMovementForUnitType(originalPosition!, nextPosition, _stringToUnitType(selectedUnit!.unitTypeId))) {
       return false;
     }
 
@@ -297,7 +304,7 @@ class GameState extends ChangeNotifier {
       final nextPos = currentPos + direction;
       if (board.isValidCoordinate(nextPos) && selectedUnit!.canMoveTo(nextPos, units)) {
         // Check if this move would still be valid for unit type
-        if (_isValidKeyboardMovementForUnitType(originalPosition!, nextPos, selectedUnit!.type)) {
+        if (_isValidKeyboardMovementForUnitType(originalPosition!, nextPos, _stringToUnitType(selectedUnit!.unitTypeId))) {
           possibleMoves.add(nextPos);
         }
       }
@@ -546,7 +553,7 @@ class GameState extends ChangeNotifier {
     if (!board.isValidCoordinate(target)) return false;
 
     // Create new Minor unit
-    final newUnit = GameUnit.create(
+    final newUnit = createUnit(
       id: 'spawned_${DateTime.now().millisecondsSinceEpoch}',
       type: UnitType.minor,
       owner: currentPlayer,
@@ -648,5 +655,63 @@ class GameState extends ChangeNotifier {
     player2Rewards = 0;
     board.clearHighlights();
     initializeGame();
+  }
+
+  /// Initialize unit type set (should be called after creating GameState)
+  Future<void> loadUnitTypeSet(String setName) async {
+    unitTypeSet = await UnitTypeConfigLoader.loadUnitTypeSet(setName);
+  }
+
+  /// Compatibility method to convert UnitType enum to string
+  String _unitTypeToString(UnitType type) {
+    switch (type) {
+      case UnitType.minor:
+        return 'minor';
+      case UnitType.scout:
+        return 'scout';
+      case UnitType.knight:
+        return 'knight';
+      case UnitType.guardian:
+        return 'guardian';
+    }
+  }
+
+  /// Compatibility method to convert string back to UnitType enum
+  UnitType _stringToUnitType(String unitTypeId) {
+    switch (unitTypeId) {
+      case 'minor':
+        return UnitType.minor;
+      case 'scout':
+        return UnitType.scout;
+      case 'knight':
+        return UnitType.knight;
+      case 'guardian':
+        return UnitType.guardian;
+      default:
+        throw ArgumentError('Unknown unit type: $unitTypeId');
+    }
+  }
+
+  /// Compatibility method to create units with the new system
+  GameUnit createUnit({
+    required String id,
+    required UnitType type,
+    required Player owner,
+    required HexCoordinate position,
+  }) {
+    final unitTypeId = _unitTypeToString(type);
+    final config = unitTypeSet?.getUnitConfig(unitTypeId);
+
+    if (config == null) {
+      throw StateError('Unit type set not loaded or unit type $unitTypeId not found');
+    }
+
+    return GameUnit(
+      id: id,
+      unitTypeId: unitTypeId,
+      config: config,
+      owner: owner,
+      position: position,
+    );
   }
 }
