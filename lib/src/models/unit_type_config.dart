@@ -6,6 +6,7 @@ class UnitTypeConfig {
   final String id;
   final String name;
   final int health;
+  final int maxHealth;
   final int movementRange;
   final int attackRange;
   final int attackDamage;
@@ -19,6 +20,7 @@ class UnitTypeConfig {
     required this.id,
     required this.name,
     required this.health,
+    required this.maxHealth,
     required this.movementRange,
     required this.attackRange,
     required this.attackDamage,
@@ -34,6 +36,7 @@ class UnitTypeConfig {
       id: id,
       name: json['name'] as String,
       health: json['health'] as int,
+      maxHealth: json['max_health'] as int? ?? json['health'] as int, // Fallback to health if max_health not present
       movementRange: json['movement_range'] as int,
       attackRange: json['attack_range'] as int,
       attackDamage: json['attack_damage'] as int,
@@ -49,6 +52,7 @@ class UnitTypeConfig {
     return {
       'name': name,
       'health': health,
+      'max_health': maxHealth,
       'movement_range': movementRange,
       'attack_range': attackRange,
       'attack_damage': attackDamage,

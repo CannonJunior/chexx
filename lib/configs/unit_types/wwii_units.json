@@ -5,29 +5,32 @@
   "units": {
     "infantry": {
       "name": "Infantry",
-      "health": 2,
+      "health": 1,
+      "max_health": 4,
       "movement_range": 2,
       "attack_range": 1,
       "attack_damage": 2,
       "movement_type": "adjacent",
-      "is_incrementable": false,
+      "is_incrementable": true,
       "symbol": "I",
       "description": "Standard infantry unit with balanced stats"
     },
     "armor": {
       "name": "Armor",
-      "health": 4,
+      "health": 1,
+      "max_health": 3,
       "movement_range": 3,
       "attack_range": 2,
       "attack_damage": 3,
       "movement_type": "straight_line",
-      "is_incrementable": false,
+      "is_incrementable": true,
       "symbol": "A",
       "description": "Heavy armored unit with high damage and mobility"
     },
     "artillery": {
       "name": "Artillery",
-      "health": 2,
+      "health": 1,
+      "max_health": 2,
       "movement_range": 1,
       "attack_range": 4,
       "attack_damage": 4,
@@ -35,7 +38,7 @@
       "special": {
         "special": "indirect_fire"
       },
-      "is_incrementable": false,
+      "is_incrementable": true,
       "symbol": "R",
       "description": "Long-range artillery with powerful attacks but limited mobility"
     }

@@ -4,6 +4,7 @@ import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
 import 'game_state.dart';
+import 'unit_type_config.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 /// Enumeration of hexagon orientations
@@ -173,6 +174,9 @@ class ScenarioBuilderState extends ChangeNotifier {
   // Selected placed unit for info display
   PlacedUnit? selectedPlacedUnit;
 
+  // Current unit type set for configuration-based behavior
+  UnitTypeSet? currentUnitTypeSet;
+
   ScenarioBuilderState() {
     _initializeAvailableUnits();
     _initializeAvailableStructures();
@@ -296,7 +300,127 @@ class ScenarioBuilderState extends ChangeNotifier {
     return success;
   }
 
-  /// Check if a unit type is incrementable
+  /// Set the current unit type set for configuration-based behavior
+  void setCurrentUnitTypeSet(UnitTypeSet? unitTypeSet) {
+    currentUnitTypeSet = unitTypeSet;
+  }
+
+  /// Get unit configuration from template
+  UnitTypeConfig? _getUnitConfigFromTemplate(UnitTemplate template) {
+    if (currentUnitTypeSet == null) return null;
+
+    // Convert enum back to string ID for lookup
+    final unitTypeId = _getUnitTypeIdFromTemplate(template);
+    return currentUnitTypeSet!.getUnitConfig(unitTypeId);
+  }
+
+  /// Convert template back to unit type ID
+  String _getUnitTypeIdFromTemplate(UnitTemplate template) {
+    // Check if the template ID contains the actual unit type ID
+    if (template.id.contains('_')) {
+      final parts = template.id.split('_');
+      if (parts.length > 1) {
+        return parts[1]; // e.g., "p1_infantry" -> "infantry"
+      }
+    }
+
+    // Fallback to enum name
+    return template.type.toString().split('.').last;
+  }
+
+  /// Check if a unit template is incrementable based on configuration
+  bool _isIncrementableTemplate(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.isIncrementable ?? _isIncrementableType(template.type);
+  }
+
+  /// Get max health for a unit template
+  int _getMaxHealthForTemplate(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.maxHealth ?? _getDefaultMaxHealth(template.type);
+  }
+
+  /// Get starting health for a unit template
+  int _getStartingHealthForTemplate(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.health ?? 1; // Default starting health is 1
+  }
+
+  /// Increment health of the selected unit (if incrementable)
+  bool incrementSelectedUnitHealth() {
+    if (selectedPlacedUnit == null) return false;
+
+    final unit = selectedPlacedUnit!;
+    final isIncrementable = _isIncrementableTemplate(unit.template);
+
+    if (!isIncrementable) return false;
+
+    final currentHealth = unit.customHealth ?? _getStartingHealthForTemplate(unit.template);
+    final maxHealth = _getMaxHealthForTemplate(unit.template);
+
+    if (currentHealth >= maxHealth) return false; // Already at max
+
+    // Remove old unit and add with incremented health
+    placedUnits.remove(unit);
+    final newUnit = PlacedUnit(
+      template: unit.template,
+      position: unit.position,
+      customHealth: currentHealth + 1,
+    );
+    placedUnits.add(newUnit);
+
+    // Update selected unit reference
+    selectedPlacedUnit = newUnit;
+
+    notifyListeners();
+    return true;
+  }
+
+  /// Decrement health of the selected unit (if incrementable and above starting health)
+  bool decrementSelectedUnitHealth() {
+    if (selectedPlacedUnit == null) return false;
+
+    final unit = selectedPlacedUnit!;
+    final isIncrementable = _isIncrementableTemplate(unit.template);
+
+    if (!isIncrementable) return false;
+
+    final currentHealth = unit.customHealth ?? _getStartingHealthForTemplate(unit.template);
+    final startingHealth = _getStartingHealthForTemplate(unit.template);
+
+    if (currentHealth <= startingHealth) return false; // Already at starting health
+
+    // Remove old unit and add with decremented health
+    placedUnits.remove(unit);
+    final newUnit = PlacedUnit(
+      template: unit.template,
+      position: unit.position,
+      customHealth: currentHealth - 1,
+    );
+    placedUnits.add(newUnit);
+
+    // Update selected unit reference
+    selectedPlacedUnit = newUnit;
+
+    notifyListeners();
+    return true;
+  }
+
+  /// Legacy method: Get default max health (fallback)
+  int _getDefaultMaxHealth(UnitType type) {
+    switch (type) {
+      case UnitType.minor:
+        return 2;
+      case UnitType.scout:
+        return 2;
+      case UnitType.knight:
+        return 3;
+      case UnitType.guardian:
+        return 3;
+    }
+  }
+
+  /// Check if a unit type is incrementable (legacy fallback)
   bool _isIncrementableType(UnitType type) {
     switch (type) {
       case UnitType.minor:
@@ -310,20 +434,24 @@ class ScenarioBuilderState extends ChangeNotifier {
     }
   }
 
-  /// Place a unit at the specified position
+  /// Place a unit at the specified position (with health incrementation for incrementable units)
   bool _placeUnit(HexCoordinate position) {
     if (selectedUnitTemplate == null) return false;
 
     // Check if position is already occupied
     final existingUnits = placedUnits.where((unit) => unit.position == position).toList();
     final existingUnit = existingUnits.isNotEmpty ? existingUnits.first : null;
+
+    // Check if this unit type is incrementable
+    final isIncrementable = _isIncrementableTemplate(selectedUnitTemplate!);
+
     if (existingUnit != null) {
-      // Replace existing unit
+      // Remove existing unit (click to replace behavior)
       placedUnits.remove(existingUnit);
     }
 
-    // Set health to 1 for incrementable units (minor and guardian)
-    final customHealth = _isIncrementableType(selectedUnitTemplate!.type) ? 1 : null;
+    // Place new unit with starting health from configuration for incrementable units
+    final customHealth = isIncrementable ? _getStartingHealthForTemplate(selectedUnitTemplate!) : null;
 
     placedUnits.add(PlacedUnit(
       template: selectedUnitTemplate!,

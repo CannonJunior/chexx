@@ -70,6 +70,9 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
       // Update the available unit templates in the builder state
       _updateAvailableUnitTemplates();
+
+      // Pass the unit type set to the builder state for configuration-based behavior
+      builderState.setCurrentUnitTypeSet(unitTypeSet);
     } catch (e) {
       // Show error dialog
       if (mounted) {
@@ -769,6 +772,9 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
                       '• Click placed unit to view info',
                     ),
                     _buildInstructionItem(
+                      '• ↑/↓ arrows: increment/decrement health',
+                    ),
+                    _buildInstructionItem(
                       '• Click again on selected unit to remove',
                     ),
 
@@ -844,6 +850,23 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   void _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
       final key = event.logicalKey;
+
+      // Handle health increment/decrement with arrow keys
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (builderState.incrementSelectedUnitHealth()) {
+          setState(() {}); // Update UI
+        }
+        return;
+      }
+
+      if (key == LogicalKeyboardKey.arrowDown) {
+        if (builderState.decrementSelectedUnitHealth()) {
+          setState(() {}); // Update UI
+        }
+        return;
+      }
+
+      // Handle cursor movement with QWEASD keys
       if (key == LogicalKeyboardKey.keyQ ||
           key == LogicalKeyboardKey.keyW ||
           key == LogicalKeyboardKey.keyE ||
@@ -1111,10 +1134,12 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           const SizedBox(height: 8),
 
           // Unit stats
-          _buildInfoRow('Health', '${_getUnitMaxHealth(unit.template.type)}', Icons.favorite),
-          _buildInfoRow('Movement', '${_getUnitMovementRange(unit.template.type)}', Icons.directions_run),
-          _buildInfoRow('Attack Range', '${_getUnitAttackRange(unit.template.type)}', Icons.gps_fixed),
-          _buildInfoRow('Attack Damage', '${_getUnitAttackDamage(unit.template.type)}', Icons.flash_on),
+          _buildInfoRow('Current Health', '${_getCurrentHealth(unit)}', Icons.favorite),
+          _buildInfoRow('Max Health', '${_getActualUnitMaxHealth(unit.template)}', Icons.favorite_border),
+          _buildInfoRow('Starting Health', '${_getActualUnitStartingHealth(unit.template)}', Icons.favorite_outline),
+          _buildInfoRow('Movement', '${_getActualUnitMovementRange(unit.template)}', Icons.directions_run),
+          _buildInfoRow('Attack Range', '${_getActualUnitAttackRange(unit.template)}', Icons.gps_fixed),
+          _buildInfoRow('Attack Damage', '${_getActualUnitAttackDamage(unit.template)}', Icons.flash_on),
 
           const SizedBox(height: 8),
 
@@ -1144,7 +1169,7 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           ),
           const SizedBox(height: 4),
 
-          ..._buildParametricInfo(unit.template.type),
+          ..._buildParametricInfo(unit.template),
         ],
       ),
     );
@@ -1301,13 +1326,13 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   }
 
   /// Build parametric info section for scenario builder
-  List<Widget> _buildParametricInfo(UnitType unitType) {
+  List<Widget> _buildParametricInfo(UnitTemplate template) {
     return [
-      _buildParametricInfoRow('isIncrementable', _getIsIncrementable(unitType).toString(), Icons.trending_up),
-      _buildParametricInfoRow('Movement Type', _getMovementType(unitType), Icons.navigation),
-      _buildParametricInfoRow('Can Swap', _getCanSwap(unitType).toString(), Icons.swap_horiz),
-      _buildParametricInfoRow('Base Experience', _getBaseExperience(unitType).toString(), Icons.star_outline),
-      _buildParametricInfoRow('Level Cap', _getLevelCap(unitType).toString(), Icons.vertical_align_top),
+      _buildParametricInfoRow('isIncrementable', _getActualIsIncrementable(template).toString(), Icons.trending_up),
+      _buildParametricInfoRow('Movement Type', _getActualMovementType(template), Icons.navigation),
+      _buildParametricInfoRow('Can Swap', _getCanSwap(template.type).toString(), Icons.swap_horiz),
+      _buildParametricInfoRow('Base Experience', _getBaseExperience(template.type).toString(), Icons.star_outline),
+      _buildParametricInfoRow('Level Cap', _getLevelCap(template.type).toString(), Icons.vertical_align_top),
     ];
   }
 
@@ -1413,6 +1438,55 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       case UnitType.guardian:
         return 6;
     }
+  }
+
+  // Configuration-aware methods that use actual loaded unit data
+
+  /// Get max health from configuration or fallback to enum
+  int _getActualUnitMaxHealth(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.maxHealth ?? _getUnitMaxHealth(template.type);
+  }
+
+  /// Get movement range from configuration or fallback to enum
+  int _getActualUnitMovementRange(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.movementRange ?? _getUnitMovementRange(template.type);
+  }
+
+  /// Get attack range from configuration or fallback to enum
+  int _getActualUnitAttackRange(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.attackRange ?? _getUnitAttackRange(template.type);
+  }
+
+  /// Get attack damage from configuration or fallback to enum
+  int _getActualUnitAttackDamage(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.attackDamage ?? _getUnitAttackDamage(template.type);
+  }
+
+  /// Get isIncrementable from configuration or fallback to enum
+  bool _getActualIsIncrementable(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.isIncrementable ?? _getIsIncrementable(template.type);
+  }
+
+  /// Get movement type from configuration or fallback to enum
+  String _getActualMovementType(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.movementType ?? _getMovementType(template.type);
+  }
+
+  /// Get starting health from configuration or fallback to enum
+  int _getActualUnitStartingHealth(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.health ?? 1; // Default starting health is 1
+  }
+
+  /// Get current health of a placed unit
+  int _getCurrentHealth(PlacedUnit unit) {
+    return unit.customHealth ?? _getActualUnitStartingHealth(unit.template);
   }
 }
 
@@ -1642,6 +1716,37 @@ class ScenarioBuilderPainter extends CustomPainter {
           center.dy - textPainter.height / 2,
         ),
       );
+
+      // Draw health indicators for incrementable units
+      if (placedUnit.customHealth != null && placedUnit.customHealth! > 1) {
+        _drawHealthIndicators(canvas, center, placedUnit.customHealth!);
+      }
+    }
+  }
+
+  /// Draw health indicators as small dots around the unit
+  void _drawHealthIndicators(Canvas canvas, Offset center, int health) {
+    const dotRadius = 3.0;
+    const spacing = 8.0;
+    final healthPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.green.shade400;
+
+    final healthStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = Colors.black87;
+
+    // Draw health dots in a line below the unit
+    final startX = center.dx - ((health - 1) * spacing) / 2;
+    final dotY = center.dy + hexSize * 0.6;
+
+    for (int i = 0; i < health; i++) {
+      final dotX = startX + (i * spacing);
+      final dotCenter = Offset(dotX, dotY);
+
+      canvas.drawCircle(dotCenter, dotRadius, healthPaint);
+      canvas.drawCircle(dotCenter, dotRadius, healthStrokePaint);
     }
   }
 
