@@ -32,7 +32,9 @@
       "attack_range": 4,
       "attack_damage": 4,
       "movement_type": "adjacent",
-      "special": "indirect_fire",
+      "special": {
+        "special": "indirect_fire"
+      },
       "is_incrementable": false,
       "symbol": "R",
       "description": "Long-range artillery with powerful attacks but limited mobility"

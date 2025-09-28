@@ -43,7 +43,9 @@
       "attack_range": 1,
       "attack_damage": 1,
       "movement_type": "adjacent",
-      "special": "can_swap_with_friendly",
+      "special": {
+        "special": "can_swap_with_friendly"
+      },
       "is_incrementable": true,
       "symbol": "G",
       "description": "Defensive unit that can swap positions with friendly units"

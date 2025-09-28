@@ -8,6 +8,7 @@ import '../models/hex_coordinate.dart';
 import '../models/game_unit.dart';
 import '../models/game_board.dart';
 import '../models/game_state.dart';
+import '../models/unit_type_config.dart';
 import '../engine/game_engine.dart';
 import '../../core/interfaces/unit_factory.dart';
 
@@ -27,6 +28,11 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   Offset? _lastTapPosition;
   late FocusNode _focusNode;
 
+  // Unit type configuration
+  UnitTypeSet? currentUnitTypeSet;
+  String currentUnitSetName = 'chexx';
+  final Map<String, String> availableUnitSets = UnitTypeConfigLoader.getAvailableSetDisplayNames();
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +44,9 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       builderState.loadFromScenarioData(widget.initialScenarioData!);
     }
 
+    // Load default unit type set
+    _loadUnitTypeSet(currentUnitSetName);
+
     // Request focus for keyboard input
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -48,6 +57,118 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   void dispose() {
     _focusNode.dispose();
     super.dispose();
+  }
+
+  /// Load a unit type set and update available unit templates
+  Future<void> _loadUnitTypeSet(String setName) async {
+    try {
+      final unitTypeSet = await UnitTypeConfigLoader.loadUnitTypeSet(setName);
+      setState(() {
+        currentUnitTypeSet = unitTypeSet;
+        currentUnitSetName = setName;
+      });
+
+      // Update the available unit templates in the builder state
+      _updateAvailableUnitTemplates();
+    } catch (e) {
+      // Show error dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error Loading Unit Types'),
+            content: Text('Failed to load unit type set "$setName": $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  /// Update available unit templates based on current unit type set
+  void _updateAvailableUnitTemplates() {
+    if (currentUnitTypeSet == null) return;
+
+    // Clear existing templates
+    builderState.availableUnits.clear();
+
+    // Add templates for each unit type in the set for both players
+    for (final unitTypeId in currentUnitTypeSet!.unitTypeIds) {
+      final config = currentUnitTypeSet!.getUnitConfig(unitTypeId);
+      if (config != null) {
+        // Convert string ID back to enum for compatibility
+        final unitType = _stringToUnitType(unitTypeId);
+
+        // Add for both players
+        builderState.availableUnits.addAll([
+          UnitTemplate(type: unitType, owner: Player.player1, id: 'p1_$unitTypeId'),
+          UnitTemplate(type: unitType, owner: Player.player2, id: 'p2_$unitTypeId'),
+        ]);
+      }
+    }
+  }
+
+  /// Convert string unit type ID back to enum (compatibility)
+  UnitType _stringToUnitType(String unitTypeId) {
+    switch (unitTypeId) {
+      case 'minor':
+        return UnitType.minor;
+      case 'scout':
+        return UnitType.scout;
+      case 'knight':
+        return UnitType.knight;
+      case 'guardian':
+        return UnitType.guardian;
+      case 'infantry':
+        return UnitType.minor; // Map infantry to minor for compatibility
+      case 'armor':
+        return UnitType.knight; // Map armor to knight for compatibility
+      case 'artillery':
+        return UnitType.scout; // Map artillery to scout for compatibility
+      default:
+        return UnitType.minor; // Default fallback
+    }
+  }
+
+  /// Get the actual unit type ID from the template (reverse mapping)
+  String _getUnitTypeIdFromTemplate(UnitTemplate template) {
+    if (currentUnitTypeSet == null) {
+      return template.type.toString().split('.').last;
+    }
+
+    // Look through the current unit type set to find the original ID
+    for (final unitTypeId in currentUnitTypeSet!.unitTypeIds) {
+      final mappedType = _stringToUnitType(unitTypeId);
+      if (mappedType == template.type && template.id.contains(unitTypeId)) {
+        return unitTypeId;
+      }
+    }
+
+    // Fallback to enum name
+    return template.type.toString().split('.').last;
+  }
+
+  /// Get the actual unit config for a template
+  UnitTypeConfig? _getUnitConfigFromTemplate(UnitTemplate template) {
+    final unitTypeId = _getUnitTypeIdFromTemplate(template);
+    return currentUnitTypeSet?.getUnitConfig(unitTypeId);
+  }
+
+  /// Get display name from config or fallback to enum
+  String _getActualUnitName(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.name ?? _getUnitTypeName(template.type);
+  }
+
+  /// Get display symbol from config or fallback to enum
+  String _getActualUnitSymbol(UnitTemplate template) {
+    final config = _getUnitConfigFromTemplate(template);
+    return config?.symbol ?? _getUnitSymbol(template.type);
   }
 
   @override
@@ -120,13 +241,42 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(8),
                 children: [
-                  Text(
-                    'Unit Types',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Unit Types',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.settings, color: Colors.white, size: 18),
+                        tooltip: 'Load Unit Type Set',
+                        onSelected: (String setName) {
+                          _loadUnitTypeSet(setName);
+                        },
+                        itemBuilder: (BuildContext context) {
+                          return availableUnitSets.entries.map((entry) {
+                            final isSelected = entry.key == currentUnitSetName;
+                            return PopupMenuItem<String>(
+                              value: entry.key,
+                              child: Row(
+                                children: [
+                                  if (isSelected)
+                                    const Icon(Icons.check, size: 16, color: Colors.green),
+                                  if (isSelected) const SizedBox(width: 8),
+                                  Expanded(child: Text(entry.value)),
+                                ],
+                              ),
+                            );
+                          }).toList();
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   _buildPlayerUnits('Player 1 (Blue)', Player.player1),
@@ -191,7 +341,7 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         ),
         child: Center(
           child: Text(
-            _getUnitSymbol(unit.type),
+            _getActualUnitSymbol(unit),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -526,7 +676,7 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           child: GestureDetector(
             onTapDown: (details) => _handleBoardTap(details.globalPosition),
             child: CustomPaint(
-              painter: ScenarioBuilderPainter(builderState, hexSize),
+              painter: ScenarioBuilderPainter(builderState, hexSize, this),
               size: Size.infinite,
             ),
           ),
@@ -944,7 +1094,7 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              _getUnitTypeName(unit.template.type),
+              _getActualUnitName(unit.template),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -1270,8 +1420,9 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 class ScenarioBuilderPainter extends CustomPainter {
   final ScenarioBuilderState state;
   final double hexSize;
+  final _ScenarioBuilderScreenState widgetState;
 
-  ScenarioBuilderPainter(this.state, this.hexSize);
+  ScenarioBuilderPainter(this.state, this.hexSize, this.widgetState);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1474,7 +1625,7 @@ class ScenarioBuilderPainter extends CustomPainter {
       // Draw unit type symbol
       final textPainter = TextPainter(
         text: TextSpan(
-          text: _getUnitSymbol(placedUnit.template.type),
+          text: widgetState._getActualUnitSymbol(placedUnit.template),
           style: TextStyle(
             color: Colors.white,
             fontSize: hexSize * 0.3,
