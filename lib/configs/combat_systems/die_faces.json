@@ -1,0 +1,89 @@
+{
+  "name": "WWII Combat Die Configuration",
+  "description": "Configuration for die faces used in WWII combat system",
+  "version": "1.0.0",
+  "die_specifications": {
+    "sides": 6,
+    "type": "unit_based"
+  },
+  "die_faces": {
+    "1": {
+      "unit_type": "infantry",
+      "symbol": "I",
+      "description": "Infantry unit face"
+    },
+    "2": {
+      "unit_type": "armor",
+      "symbol": "A",
+      "description": "Armor unit face"
+    },
+    "3": {
+      "unit_type": "grenade",
+      "symbol": "G",
+      "description": "Grenade die face"
+    },
+    "4": {
+      "unit_type": "infantry",
+      "symbol": "I",
+      "description": "Infantry unit face #2"
+    },
+    "5": {
+      "unit_type": "retreat",
+      "symbol": "R",
+      "description": "Flag/Retreat die face"
+    },
+    "6": {
+      "unit_type": "star",
+      "symbol": "S",
+      "description": "Star die face"
+    }
+  },
+  "combat_modifiers": {
+    "description": "Effectiveness matrix for die face vs tile type combat",
+    "tile_type": {
+      "infantry": {
+        "normal": 0,
+        "meta": 0,
+        "blocked": 0,
+        "ocean": 0,
+        "beach": 0,
+        "hill": -1,
+        "town": -1,
+        "forest": -1,
+        "hedgerow": -1
+      },
+      "armor": {
+        "normal": 0,
+        "meta": 0,
+        "blocked": 0,
+        "ocean": 0,
+        "beach": 0,
+        "hill": -1,
+        "town": -2,
+        "forest": -1,
+        "hedgerow": -1
+      },
+      "artillery": {
+        "normal": 0,
+        "meta": 0,
+        "blocked": 0,
+        "ocean": 0,
+        "beach": 0,
+        "hill": 0,
+        "town": -1,
+        "forest": -1,
+        "hedgerow": -1
+      }
+    },
+    "structure_type": {
+      "infantry": {
+        "bunker": -1
+      },
+      "armor": {
+        "bunker": -1
+      },
+      "artillery": {
+        "bunker": -1
+      }
+  }
+}

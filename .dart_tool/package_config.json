@@ -44,6 +44,18 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "flame",
+      "rootUri": "file:///home/junior/.pub-cache/hosted/pub.dev/flame-1.23.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "flame_forge2d",
+      "rootUri": "file:///home/junior/.pub-cache/hosted/pub.dev/flame_forge2d-0.16.0+5",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "flutter",
       "rootUri": "file:///home/junior/development/flutter/packages/flutter",
       "packageUri": "lib/",
@@ -60,6 +72,12 @@
       "rootUri": "file:///home/junior/development/flutter/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.3"
+    },
+    {
+      "name": "forge2d",
+      "rootUri": "file:///home/junior/.pub-cache/hosted/pub.dev/forge2d-0.12.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "leak_tracker",
@@ -102,6 +120,12 @@
       "rootUri": "file:///home/junior/.pub-cache/hosted/pub.dev/meta-1.15.0",
       "packageUri": "lib/",
       "languageVersion": "2.12"
+    },
+    {
+      "name": "ordered_set",
+      "rootUri": "file:///home/junior/.pub-cache/hosted/pub.dev/ordered_set-6.1.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
     },
     {
       "name": "oxygen",
@@ -176,7 +200,7 @@
       "languageVersion": "3.5"
     }
   ],
-  "generated": "2025-09-28T04:08:30.175363Z",
+  "generated": "2025-09-30T02:07:55.544233Z",
   "generator": "pub",
   "generatorVersion": "3.5.3",
   "flutterRoot": "file:///home/junior/development/flutter",

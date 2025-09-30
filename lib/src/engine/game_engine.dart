@@ -6,7 +6,7 @@ import '../models/game_state.dart';
 import '../models/game_unit.dart';
 import '../models/game_board.dart';
 import '../models/meta_ability.dart';
-import '../models/scenario_builder_state.dart'; // For HexOrientation enum
+import '../models/hex_orientation.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 /// Custom lightweight game engine for CHEXX using Flutter's CustomPainter

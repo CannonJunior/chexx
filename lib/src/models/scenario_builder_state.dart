@@ -5,13 +5,9 @@ import 'game_unit.dart';
 import 'game_board.dart';
 import 'game_state.dart';
 import 'unit_type_config.dart';
+import 'game_type_config.dart';
+import 'hex_orientation.dart';
 import '../../core/interfaces/unit_factory.dart';
-
-/// Enumeration of hexagon orientations
-enum HexOrientation {
-  flat,
-  pointy,
-}
 
 /// Enumeration of structure types
 enum StructureType {
@@ -60,8 +56,24 @@ class UnitTemplate {
   });
 
   Map<String, dynamic> toJson() {
+    // Extract actual unit type from ID if it contains one (e.g., "p1_infantry" -> "infantry")
+    String unitTypeName;
+    if (id.contains('_')) {
+      final parts = id.split('_');
+      if (parts.length > 1) {
+        unitTypeName = parts[1]; // e.g., "p1_infantry" -> "infantry"
+        print('DEBUG: UnitTemplate.toJson - Extracted unit type "$unitTypeName" from ID "$id"');
+      } else {
+        unitTypeName = type.toString().split('.').last;
+        print('DEBUG: UnitTemplate.toJson - Fallback to enum name "$unitTypeName" for ID "$id"');
+      }
+    } else {
+      unitTypeName = type.toString().split('.').last;
+      print('DEBUG: UnitTemplate.toJson - Using enum name "$unitTypeName" for ID "$id"');
+    }
+
     return {
-      'type': type.toString().split('.').last,
+      'type': unitTypeName,
       'owner': owner.toString().split('.').last,
       'id': id,
     };
@@ -177,6 +189,9 @@ class ScenarioBuilderState extends ChangeNotifier {
   // Current unit type set for configuration-based behavior
   UnitTypeSet? currentUnitTypeSet;
 
+  // Current game type configuration
+  GameTypeConfig? currentGameTypeConfig;
+
   ScenarioBuilderState() {
     _initializeAvailableUnits();
     _initializeAvailableStructures();
@@ -187,21 +202,39 @@ class ScenarioBuilderState extends ChangeNotifier {
   void _initializeAvailableUnits() {
     availableUnits.clear();
 
-    // Player 1 units (blue) - one of each type
-    availableUnits.addAll([
-      const UnitTemplate(type: UnitType.minor, owner: Player.player1, id: 'p1_minor'),
-      const UnitTemplate(type: UnitType.scout, owner: Player.player1, id: 'p1_scout'),
-      const UnitTemplate(type: UnitType.knight, owner: Player.player1, id: 'p1_knight'),
-      const UnitTemplate(type: UnitType.guardian, owner: Player.player1, id: 'p1_guardian'),
-    ]);
+    if (currentUnitTypeSet != null && _hasWWIIUnits()) {
+      print('DEBUG: Initializing WWII unit templates');
+      // WWII unit templates
+      availableUnits.addAll([
+        const UnitTemplate(type: UnitType.minor, owner: Player.player1, id: 'p1_infantry'),
+        const UnitTemplate(type: UnitType.scout, owner: Player.player1, id: 'p1_armor'),
+        const UnitTemplate(type: UnitType.knight, owner: Player.player1, id: 'p1_artillery'),
+      ]);
 
-    // Player 2 units (red) - one of each type
-    availableUnits.addAll([
-      const UnitTemplate(type: UnitType.minor, owner: Player.player2, id: 'p2_minor'),
-      const UnitTemplate(type: UnitType.scout, owner: Player.player2, id: 'p2_scout'),
-      const UnitTemplate(type: UnitType.knight, owner: Player.player2, id: 'p2_knight'),
-      const UnitTemplate(type: UnitType.guardian, owner: Player.player2, id: 'p2_guardian'),
-    ]);
+      availableUnits.addAll([
+        const UnitTemplate(type: UnitType.minor, owner: Player.player2, id: 'p2_infantry'),
+        const UnitTemplate(type: UnitType.scout, owner: Player.player2, id: 'p2_armor'),
+        const UnitTemplate(type: UnitType.knight, owner: Player.player2, id: 'p2_artillery'),
+      ]);
+    } else {
+      print('DEBUG: Initializing default CHEXX unit templates');
+      // Default CHEXX unit templates
+      availableUnits.addAll([
+        const UnitTemplate(type: UnitType.minor, owner: Player.player1, id: 'p1_minor'),
+        const UnitTemplate(type: UnitType.scout, owner: Player.player1, id: 'p1_scout'),
+        const UnitTemplate(type: UnitType.knight, owner: Player.player1, id: 'p1_knight'),
+        const UnitTemplate(type: UnitType.guardian, owner: Player.player1, id: 'p1_guardian'),
+      ]);
+
+      availableUnits.addAll([
+        const UnitTemplate(type: UnitType.minor, owner: Player.player2, id: 'p2_minor'),
+        const UnitTemplate(type: UnitType.scout, owner: Player.player2, id: 'p2_scout'),
+        const UnitTemplate(type: UnitType.knight, owner: Player.player2, id: 'p2_knight'),
+        const UnitTemplate(type: UnitType.guardian, owner: Player.player2, id: 'p2_guardian'),
+      ]);
+    }
+
+    print('DEBUG: Initialized ${availableUnits.length} unit templates');
   }
 
   /// Initialize available structure templates from config
@@ -302,7 +335,16 @@ class ScenarioBuilderState extends ChangeNotifier {
 
   /// Set the current unit type set for configuration-based behavior
   void setCurrentUnitTypeSet(UnitTypeSet? unitTypeSet) {
+    print('DEBUG: Setting current unit type set: ${unitTypeSet?.name ?? "null"}');
     currentUnitTypeSet = unitTypeSet;
+    // Reinitialize available units based on the new unit type set
+    _initializeAvailableUnits();
+    notifyListeners();
+  }
+
+  /// Set the current game type configuration
+  void setCurrentGameTypeConfig(GameTypeConfig? gameTypeConfig) {
+    currentGameTypeConfig = gameTypeConfig;
   }
 
   /// Get unit configuration from template
@@ -326,6 +368,20 @@ class ScenarioBuilderState extends ChangeNotifier {
 
     // Fallback to enum name
     return template.type.toString().split('.').last;
+  }
+
+  /// Check if we have WWII units in the current unit type set
+  bool _hasWWIIUnits() {
+    if (currentUnitTypeSet == null) return false;
+
+    // Check if any of the classic WWII unit types exist
+    final wwiiTypes = ['infantry', 'armor', 'artillery'];
+    for (final type in wwiiTypes) {
+      if (currentUnitTypeSet!.getUnitConfig(type) != null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Check if a unit template is incrementable based on configuration
@@ -633,19 +689,85 @@ class ScenarioBuilderState extends ChangeNotifier {
 
   /// Generate scenario configuration for saving
   Map<String, dynamic> generateScenarioConfig() {
-    // Load base config (this would normally be loaded from assets)
-    final baseConfig = <String, dynamic>{
-      'board': {
-        'total_hexes': 91,
-        'hex_size': 60.0,
-        'board_layout': 'standard_91'
-      },
-      'gameplay': {
-        'turn_timer_seconds': 6,
-        'max_reward_points': 61,
-        'time_bonus_multiplier': 5
-      },
-      'unit_types': {
+    print('DEBUG: GENERATE SCENARIO CONFIG START');
+    print('DEBUG: Current game type config: ${currentGameTypeConfig?.name ?? "null"}');
+    print('DEBUG: Placed units count: ${placedUnits.length}');
+
+    // Determine game type and load appropriate unit configurations
+    Map<String, dynamic> unitTypesConfig;
+    Map<String, dynamic> metaAbilitiesConfig;
+
+    if (currentGameTypeConfig?.name == "WWII Combat" ||
+        (currentUnitTypeSet != null && _hasWWIIUnits())) {
+      print('DEBUG: Using WWII unit configurations');
+      // WWII unit configuration
+      unitTypesConfig = {
+        'infantry': {
+          'health': 1,
+          'max_health': 4,
+          'movement_range': 2,
+          'attack_range': 1,
+          'attack_damage': [1],
+          'movement_type': 'adjacent',
+          'is_incrementable': true,
+          'symbol': 'I',
+          'game_type': 'wwii'
+        },
+        'armor': {
+          'health': 1,
+          'max_health': 3,
+          'movement_range': 3,
+          'attack_range': 2,
+          'attack_damage': [1, 1],
+          'movement_type': 'straight_line',
+          'is_incrementable': true,
+          'symbol': 'A',
+          'game_type': 'wwii'
+        },
+        'artillery': {
+          'health': 1,
+          'max_health': 2,
+          'movement_range': 1,
+          'attack_range': 4,
+          'attack_damage': [1, 1, 1, 1],
+          'movement_type': 'adjacent',
+          'special': 'indirect_fire',
+          'is_incrementable': true,
+          'symbol': 'R',
+          'game_type': 'wwii'
+        }
+      };
+
+      metaAbilitiesConfig = {
+        'spawn': {
+          'description': 'Create new Infantry Unit on adjacent hex',
+          'range': 1,
+          'cooldown': 3
+        },
+        'heal': {
+          'description': 'Heal adjacent friendly unit by 1 HP',
+          'range': 1,
+          'heal_amount': 1,
+          'cooldown': 2
+        },
+        'shield': {
+          'description': 'Adjacent friendly units take -1 damage for 2 turns',
+          'range': 1,
+          'duration': 2,
+          'cooldown': 4
+        }
+      };
+    } else {
+      print('DEBUG: Using default CHEXX unit configurations');
+      // Default CHEXX unit configuration
+      unitTypesConfig = {
+        'minor': {
+          'health': 1,
+          'movement_range': 1,
+          'attack_range': 1,
+          'attack_damage': 1,
+          'movement_type': 'adjacent'
+        },
         'scout': {
           'health': 2,
           'movement_range': 3,
@@ -668,8 +790,9 @@ class ScenarioBuilderState extends ChangeNotifier {
           'movement_type': 'adjacent',
           'special': 'can_swap_with_friendly'
         }
-      },
-      'meta_abilities': {
+      };
+
+      metaAbilitiesConfig = {
         'spawn': {
           'description': 'Create new Minor Unit on adjacent hex',
           'range': 1,
@@ -687,7 +810,23 @@ class ScenarioBuilderState extends ChangeNotifier {
           'duration': 2,
           'cooldown': 4
         }
-      }
+      };
+    }
+
+    // Load base config with detected unit types
+    final baseConfig = <String, dynamic>{
+      'board': {
+        'total_hexes': 91,
+        'hex_size': 60.0,
+        'board_layout': 'standard_91'
+      },
+      'gameplay': {
+        'turn_timer_seconds': 6,
+        'max_reward_points': 61,
+        'time_bonus_multiplier': 5
+      },
+      'unit_types': unitTypesConfig,
+      'meta_abilities': metaAbilitiesConfig,
     };
 
     // Add scenario-specific data
@@ -697,7 +836,49 @@ class ScenarioBuilderState extends ChangeNotifier {
       'r': hex.r,
     }).toList();
 
-    baseConfig['unit_placements'] = placedUnits.map((unit) => unit.toJson()).toList();
+    final unitPlacements = placedUnits.map((unit) => unit.toJson()).toList();
+    print('DEBUG: Generated unit placements: ${unitPlacements.length} units');
+
+    // Validation tests for unit type conversion
+    bool allUnitsHaveCorrectTypes = true;
+    int wwiiUnitCount = 0;
+    int chexxUnitCount = 0;
+
+    for (final placement in unitPlacements) {
+      final unitType = placement['template']['type'] as String;
+      final unitId = placement['template']['id'] as String;
+
+      print('DEBUG: Unit placement - Type: $unitType, Owner: ${placement['template']['owner']}, ID: $unitId');
+
+      // Count unit types
+      if (['infantry', 'armor', 'artillery'].contains(unitType)) {
+        wwiiUnitCount++;
+      } else if (['minor', 'scout', 'knight', 'guardian'].contains(unitType)) {
+        chexxUnitCount++;
+      }
+
+      // Validate that unit type matches ID expectation
+      if (unitId.contains('_')) {
+        final expectedType = unitId.split('_')[1];
+        if (unitType != expectedType) {
+          allUnitsHaveCorrectTypes = false;
+          print('VALIDATION ERROR: Unit type mismatch - ID: $unitId, Expected: $expectedType, Actual: $unitType');
+        }
+      }
+    }
+
+    print('VALIDATION TEST: Unit type conversion - Total units: ${unitPlacements.length}, WWII units: $wwiiUnitCount, CHEXX units: $chexxUnitCount');
+    print('VALIDATION TEST: Unit type consistency - All types match IDs: $allUnitsHaveCorrectTypes');
+
+    if (_hasWWIIUnits() && wwiiUnitCount > 0) {
+      print('VALIDATION TEST: WWII unit detection - PASS: WWII units correctly preserved');
+    } else if (!_hasWWIIUnits() && chexxUnitCount > 0) {
+      print('VALIDATION TEST: CHEXX unit detection - PASS: CHEXX units correctly preserved');
+    } else {
+      print('VALIDATION TEST: Unit type detection - FAIL: Unexpected unit type distribution');
+    }
+
+    baseConfig['unit_placements'] = unitPlacements;
     baseConfig['structure_placements'] = placedStructures.map((structure) => structure.toJson()).toList();
 
     // Save board tile data (which tiles exist and their types)

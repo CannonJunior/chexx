@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:oxygen/oxygen.dart';
+import '../../../src/utils/tile_colors.dart';
 import '../../../core/engine/game_engine_base.dart';
 import '../../../core/models/hex_coordinate.dart';
 import '../../../core/interfaces/game_plugin.dart';
@@ -10,12 +11,13 @@ import '../../../core/components/owner_component.dart';
 import '../../../core/components/health_component.dart';
 import '../../../core/components/selection_component.dart';
 import '../models/chexx_game_state.dart';
-import '../../../src/models/scenario_builder_state.dart'; // For HexOrientation enum
+import '../../../src/models/hex_orientation.dart';
+import '../../../src/systems/combat/die_faces_config.dart';
 
 /// CHEXX-specific game engine
 class ChexxGameEngine extends GameEngineBase {
-  // Hexagon orientation setting
-  HexOrientation hexOrientation = HexOrientation.flat;
+  // Note: Using gameState.hexOrientation instead of local orientation
+
 
   ChexxGameEngine({
     required GamePlugin gamePlugin,
@@ -52,11 +54,38 @@ class ChexxGameEngine extends GameEngineBase {
     }
   }
 
+  void handleTap(Offset position, Size canvasSize) {
+    // Convert screen position to hex coordinate using current orientation
+    final hexCoord = _screenToHex(position, canvasSize);
+    print('DEBUG: HANDLE TAP - Screen position: $position, Canvas size: $canvasSize');
+    print('DEBUG: HANDLE TAP - Converted to hex: $hexCoord, Orientation: ${(gameState as ChexxGameState).hexOrientation.name}');
+
+    if (hexCoord != null) {
+      handleHexTap(hexCoord);
+    }
+  }
+
+  HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {
+    // Convert screen position to game world position
+    final centerX = canvasSize.width / 2;
+    final centerY = canvasSize.height / 2;
+
+    final gameX = screenPos.dx - centerX;
+    final gameY = screenPos.dy - centerY;
+
+    print('DEBUG: SCREEN TO HEX - Game coordinates: ($gameX, $gameY), Orientation: ${(gameState as ChexxGameState).hexOrientation.name}');
+
+    final hexCoord = HexCoordinate.fromPixel(gameX, gameY, 50.0);
+    print('DEBUG: SCREEN TO HEX - Result: $hexCoord');
+
+    return hexCoord;
+  }
+
   @override
   void handleHexTap(HexCoordinate hexCoord) {
     final chexxGameState = gameState as ChexxGameState;
 
-    print('Hex tapped at: $hexCoord');
+    print('DEBUG: HEX TAP - Hex tapped at: $hexCoord, Current orientation: ${(gameState as ChexxGameState).hexOrientation.name}');
 
     // Find unit at this position using simple loop
     SimpleGameUnit? unitAtPosition;
@@ -93,10 +122,17 @@ class ChexxGameEngine extends GameEngineBase {
 
           if (distance <= attackRange) {
             // Attack the target unit
-            final damage = _getUnitAttackDamage(selectedUnit.unitType);
+            // Roll dice for attack
+            final diceRollResults = _performDiceBasedAttack(selectedUnit, unitAtPosition);
+            final damage = diceRollResults.$1;
+            final diceRolls = diceRollResults.$2;
+
+            // Record dice roll results for display
+            final result = '$damage damage dealt';
+            chexxGameState.recordDiceRoll(diceRolls, result);
             final newHealth = (unitAtPosition.health - damage).clamp(0, unitAtPosition.maxHealth).toInt();
 
-            print('${selectedUnit.unitType} attacks ${unitAtPosition.unitType} for $damage damage');
+            print('${selectedUnit.unitType} attacks ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
 
             if (newHealth <= 0) {
               // Remove dead unit
@@ -248,12 +284,113 @@ class ChexxGameEngine extends GameEngineBase {
     return distance <= 1 && attacker.owner != target.owner;
   }
 
-  /// Toggle hexagon orientation between flat and pointy
-  void toggleHexOrientation() {
-    hexOrientation = hexOrientation == HexOrientation.flat
-        ? HexOrientation.pointy
-        : HexOrientation.flat;
-    notifyListeners();
+  /// Perform dice-based attack using WWII combat system
+  (int, List<DieFace>) _performDiceBasedAttack(SimpleGameUnit attacker, SimpleGameUnit defender) {
+    // Load die faces configuration - for now, use a simplified version
+    // In a real implementation, this would be cached
+    final diceConfig = _getDefaultDiceConfig();
+
+    // Calculate number of dice to roll based on attacker damage
+    final baseDamage = _getUnitAttackDamage(attacker.unitType);
+    final numDice = baseDamage;
+
+    // Roll dice
+    final diceRolls = <DieFace>[];
+    final random = Random();
+    int totalDamage = 0;
+
+    for (int i = 0; i < numDice; i++) {
+      final roll = random.nextInt(6) + 1; // 1-6
+      final dieFace = _getDieFaceForRoll(roll);
+      diceRolls.add(dieFace);
+
+      // Calculate damage based on die face type
+      final damage = _calculateDamageFromDieFace(dieFace, defender);
+      totalDamage += damage;
+    }
+
+    return (totalDamage, diceRolls);
+  }
+
+  /// Get default dice configuration (simplified version)
+  Map<int, DieFace> _getDefaultDiceConfig() {
+    return {
+      1: const DieFace(unitType: 'infantry', symbol: 'I', description: 'Infantry unit face'),
+      2: const DieFace(unitType: 'armor', symbol: 'A', description: 'Armor unit face'),
+      3: const DieFace(unitType: 'grenade', symbol: 'G', description: 'Grenade die face'),
+      4: const DieFace(unitType: 'infantry', symbol: 'I', description: 'Infantry unit face #2'),
+      5: const DieFace(unitType: 'retreat', symbol: 'R', description: 'Flag/Retreat die face'),
+      6: const DieFace(unitType: 'star', symbol: 'S', description: 'Star die face'),
+    };
+  }
+
+  /// Get die face for a specific roll result
+  DieFace _getDieFaceForRoll(int roll) {
+    final config = _getDefaultDiceConfig();
+    return config[roll] ?? const DieFace(unitType: 'infantry', symbol: 'I', description: 'Default infantry');
+  }
+
+  /// Calculate damage from a die face result
+  int _calculateDamageFromDieFace(DieFace dieFace, SimpleGameUnit defender) {
+    // Base damage based on die face type
+    switch (dieFace.unitType) {
+      case 'infantry':
+        return 1;
+      case 'armor':
+        return 2;
+      case 'grenade':
+        return 3;
+      case 'star':
+        return 2;
+      case 'retreat':
+        return 0; // Retreat does no damage
+      default:
+        return 1;
+    }
+  }
+
+  // Note: toggleHexOrientation is now handled by gameState.toggleHexOrientation()
+
+  /// Convert hex coordinate to screen position
+  Offset hexToScreen(HexCoordinate hex, Size canvasSize) {
+    final hexSize = 50.0; // Same as the other engine
+    final (x, y) = hex.toPixel(hexSize);
+
+    final centerX = canvasSize.width / 2;
+    final centerY = canvasSize.height / 2;
+
+    return Offset(centerX + x, centerY + y);
+  }
+
+  /// Get hex vertices for rendering
+  List<Offset> getHexVertices(HexCoordinate hex, Size canvasSize) {
+    final hexSize = 50.0; // Same as the other engine
+    final center = hexToScreen(hex, canvasSize);
+    final vertices = <Offset>[];
+
+    // Use gameState's orientation instead of engine's local orientation
+    final currentOrientation = (gameState as ChexxGameState).hexOrientation;
+
+    print('DEBUG: GET HEX VERTICES - Orientation: ${currentOrientation.name}, Hex: $hex');
+
+    for (int i = 0; i < 6; i++) {
+      // Calculate hexagon vertices based on orientation
+      double angle;
+      if (currentOrientation == HexOrientation.flat) {
+        // Flat-top orientation: first vertex at angle 0 (flat top/bottom)
+        angle = i * pi / 3;
+      } else {
+        // Pointy-top orientation: first vertex at angle π/6 (pointed top/bottom)
+        angle = (i * pi / 3) + (pi / 6);
+      }
+
+      final x = center.dx + hexSize * cos(angle);
+      final y = center.dy + hexSize * sin(angle);
+      vertices.add(Offset(x, y));
+    }
+
+    print('DEBUG: GET HEX VERTICES - Generated ${vertices.length} vertices for ${currentOrientation.name} orientation');
+    return vertices;
   }
 }
 
@@ -265,6 +402,10 @@ class ChexxGamePainter extends CustomPainter {
   static final Paint _normalPaint = Paint()
     ..style = PaintingStyle.fill
     ..color = Colors.lightGreen.shade100;
+
+  static final Paint _metaPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..color = Colors.purple.shade200;
 
   static final Paint _strokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -306,11 +447,38 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   void _drawHexTiles(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Draw board tiles from game state (supporting custom scenarios)
-    final hexes = gameState.board.allTiles.map((tile) =>
-      HexCoordinate(tile.coordinate.q, tile.coordinate.r, tile.coordinate.s)).toList();
+    // Debug: Log comprehensive tile data validation
+    print('DEBUG: TILE DATA VALIDATION START');
+    print('DEBUG: Total tiles in gameState.board.allTiles: ${gameState.board.allTiles.length}');
+    print('DEBUG: Current hex orientation: ${(engine.gameState as ChexxGameState).hexOrientation.name}');
 
-    for (final hex in hexes) {
+    // Validate board structure
+    if (gameState.board.allTiles.isEmpty) {
+      print('DEBUG: ERROR - No tiles found in game board!');
+      return;
+    }
+
+    // Sample a few tiles for detailed validation
+    final sampleTiles = gameState.board.allTiles.take(5).toList();
+    for (int i = 0; i < sampleTiles.length; i++) {
+      final tile = sampleTiles[i];
+      print('DEBUG: Sample tile $i - Coordinate: (${tile.coordinate.q},${tile.coordinate.r},${tile.coordinate.s})');
+      print('DEBUG: Sample tile $i - Type: ${tile.type.name}');
+      print('DEBUG: Sample tile $i - Type toString: ${tile.type.toString()}');
+      print('DEBUG: Sample tile $i - Available properties: ${tile.type}');
+    }
+
+    // Count tiles by type
+    final typeCounts = <String, int>{};
+    for (final tile in gameState.board.allTiles) {
+      final typeName = tile.type.name;
+      typeCounts[typeName] = (typeCounts[typeName] ?? 0) + 1;
+    }
+    print('DEBUG: Tile type distribution: $typeCounts');
+
+    // Draw board tiles from game state (supporting custom scenarios)
+    for (final tile in gameState.board.allTiles) {
+      final hex = HexCoordinate(tile.coordinate.q, tile.coordinate.r, tile.coordinate.s);
       final vertices = engine.getHexVertices(hex, size);
       if (vertices.isNotEmpty) {
         final path = Path();
@@ -320,8 +488,23 @@ class ChexxGamePainter extends CustomPainter {
         }
         path.close();
 
+        // For now, disable meta hex detection until the data structure is available
+        bool isMetaHex = false;
+        // TODO: Add meta hex detection when metaHexes property is available
+
+        // Choose paint based on tile type and meta hex status
+        Paint tilePaint = _normalPaint;
+        if (isMetaHex) {
+          tilePaint = _metaPaint;
+        } else {
+          // Use centralized tile colors from TileColors utility
+          print('DEBUG: Processing tile type: "${tile.type}"');
+          tilePaint = TileColors.getPaintForTileType(tile.type);
+          print('DEBUG: Applied ${tile.type} paint to tile');
+        }
+
         // Fill hex
-        canvas.drawPath(path, _normalPaint);
+        canvas.drawPath(path, tilePaint);
 
         // Draw border
         canvas.drawPath(path, _strokePaint);
@@ -337,16 +520,57 @@ class ChexxGamePainter extends CustomPainter {
         }
       }
     }
+    print('DEBUG: TILE DATA VALIDATION END');
   }
 
   void _drawUnits(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Render simple units with type-specific appearance
+    // Debug: Log comprehensive unit data validation
+    print('DEBUG: UNIT DATA VALIDATION START');
+    print('DEBUG: Total units in gameState.simpleUnits: ${gameState.simpleUnits.length}');
+
+    // Validate unit structure
+    if (gameState.simpleUnits.isEmpty) {
+      print('DEBUG: WARNING - No units found in game state!');
+      return;
+    }
+
+    // Count units by type and owner
+    final unitTypeCounts = <String, int>{};
+    final ownerCounts = <Player, int>{};
+
+    for (final unit in gameState.simpleUnits) {
+      // Count by type
+      unitTypeCounts[unit.unitType] = (unitTypeCounts[unit.unitType] ?? 0) + 1;
+      // Count by owner
+      ownerCounts[unit.owner] = (ownerCounts[unit.owner] ?? 0) + 1;
+    }
+
+    print('DEBUG: Unit type distribution: $unitTypeCounts');
+    print('DEBUG: Unit owner distribution: $ownerCounts');
+
+    // Validate each unit in detail
     for (int i = 0; i < gameState.simpleUnits.length; i++) {
       final unit = gameState.simpleUnits[i];
+      print('DEBUG: Unit $i validation:');
+      print('DEBUG:   Position: (${unit.position.q},${unit.position.r},${unit.position.s})');
+      print('DEBUG:   Type: "${unit.unitType}"');
+      print('DEBUG:   Owner: ${unit.owner}');
+      print('DEBUG:   Health: ${unit.health}/${unit.maxHealth}');
+      print('DEBUG:   Selected: ${unit.isSelected}');
+      print('DEBUG:   Movement: ${unit.remainingMovement}');
+
+      // Validate unit type against expected types
+      final validTypes = ['minor', 'scout', 'knight', 'guardian'];
+      if (!validTypes.contains(unit.unitType)) {
+        print('DEBUG:   ERROR - Invalid unit type: "${unit.unitType}"');
+        print('DEBUG:   ERROR - Expected one of: $validTypes');
+      }
+
       final center = engine.hexToScreen(unit.position, size);
 
       // Check if unit is incrementable
       final isIncrementable = _isUnitIncrementable(unit.unitType);
+      print('DEBUG:   Is incrementable: $isIncrementable');
 
       if (isIncrementable) {
         _drawIncrementableUnit(canvas, center, unit);
@@ -354,6 +578,7 @@ class ChexxGamePainter extends CustomPainter {
         _drawStandardUnit(canvas, center, unit);
       }
     }
+    print('DEBUG: UNIT DATA VALIDATION END');
   }
 
   void _drawStandardUnit(Canvas canvas, Offset center, SimpleGameUnit unit) {

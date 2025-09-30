@@ -4,6 +4,7 @@ import '../engine/game_engine.dart';
 import '../models/game_state.dart';
 import '../models/game_unit.dart';
 import '../models/meta_ability.dart';
+import '../models/hex_orientation.dart';
 
 /// Main game screen using custom game engine
 class ChexxGameScreen extends StatefulWidget {
@@ -198,6 +199,24 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
           onPressed: () => gameEngine.togglePause(),
           icon: Icon(
             gameState.isPaused ? Icons.play_arrow : Icons.pause,
+            color: Colors.white,
+            size: 28,
+          ),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.black54,
+            shape: const CircleBorder(),
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Hex orientation toggle button
+        IconButton(
+          onPressed: () => gameEngine.gameState.toggleHexOrientation(),
+          icon: Icon(
+            gameState.hexOrientation == HexOrientation.flat
+                ? Icons.hexagon_outlined
+                : Icons.change_history_outlined,
             color: Colors.white,
             size: 28,
           ),

@@ -9,11 +9,12 @@ class UnitTypeConfig {
   final int maxHealth;
   final int movementRange;
   final int attackRange;
-  final int attackDamage;
+  final dynamic attackDamage; // Can be int (legacy) or List<int> (WWII style)
   final String movementType;
   final bool isIncrementable;
   final String symbol;
   final String description;
+  final String? gameType; // Associated game type (e.g., 'chexx', 'wwii')
   final Map<String, dynamic>? special;
 
   const UnitTypeConfig({
@@ -28,10 +29,20 @@ class UnitTypeConfig {
     required this.isIncrementable,
     required this.symbol,
     required this.description,
+    this.gameType,
     this.special,
   });
 
   factory UnitTypeConfig.fromJson(String id, Map<String, dynamic> json) {
+    // Handle attack_damage as either int or List<int>
+    final attackDamageJson = json['attack_damage'];
+    dynamic attackDamage;
+    if (attackDamageJson is List) {
+      attackDamage = List<int>.from(attackDamageJson);
+    } else {
+      attackDamage = attackDamageJson as int;
+    }
+
     return UnitTypeConfig(
       id: id,
       name: json['name'] as String,
@@ -39,11 +50,12 @@ class UnitTypeConfig {
       maxHealth: json['max_health'] as int? ?? json['health'] as int, // Fallback to health if max_health not present
       movementRange: json['movement_range'] as int,
       attackRange: json['attack_range'] as int,
-      attackDamage: json['attack_damage'] as int,
+      attackDamage: attackDamage,
       movementType: json['movement_type'] as String,
       isIncrementable: json['is_incrementable'] as bool,
       symbol: json['symbol'] as String,
       description: json['description'] as String,
+      gameType: json['game_type'] as String?,
       special: json['special'] as Map<String, dynamic>?,
     );
   }
@@ -60,8 +72,41 @@ class UnitTypeConfig {
       'is_incrementable': isIncrementable,
       'symbol': symbol,
       'description': description,
+      if (gameType != null) 'game_type': gameType,
       if (special != null) 'special': special,
     };
+  }
+
+  /// Get attack damage as a single integer (for legacy/CHEXX units)
+  int get attackDamageAsInt {
+    if (attackDamage is int) {
+      return attackDamage as int;
+    } else if (attackDamage is List<int>) {
+      // For WWII units, return the length of the array as the "damage"
+      return (attackDamage as List<int>).length;
+    }
+    return 1; // Fallback
+  }
+
+  /// Get attack damage as a list (for WWII units)
+  List<int> get attackDamageAsList {
+    if (attackDamage is List<int>) {
+      return attackDamage as List<int>;
+    } else if (attackDamage is int) {
+      // Convert single integer to list for compatibility
+      return List.filled(attackDamage as int, 1);
+    }
+    return [1]; // Fallback
+  }
+
+  /// Check if this unit uses WWII-style array-based attack damage
+  bool get usesWWIIAttackSystem {
+    return attackDamage is List<int> || gameType == 'wwii';
+  }
+
+  /// Check if this unit belongs to a specific game type
+  bool belongsToGameType(String type) {
+    return gameType == type;
   }
 }
 

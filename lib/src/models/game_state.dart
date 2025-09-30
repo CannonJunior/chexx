@@ -4,6 +4,7 @@ import 'game_unit.dart';
 import 'game_board.dart';
 import 'meta_ability.dart';
 import 'unit_type_config.dart';
+import 'hex_orientation.dart';
 import '../../core/interfaces/unit_factory.dart';
 
 enum GamePhase { setup, playing, gameOver }
@@ -50,6 +51,9 @@ class GameState extends ChangeNotifier {
   // Unit type system
   UnitTypeSet? unitTypeSet;
 
+  // Hexagon orientation setting
+  HexOrientation hexOrientation;
+
   GameState()
       : board = GameBoard(),
         units = [],
@@ -66,7 +70,8 @@ class GameState extends ChangeNotifier {
         activeMetaEffects = [],
         metaAbilityDefinitions = {},
         player1Rewards = 0,
-        player2Rewards = 0;
+        player2Rewards = 0,
+        hexOrientation = HexOrientation.flat;
 
   /// Initialize game from scenario configuration
   void initializeFromScenario(Map<String, dynamic> scenarioConfig) {
@@ -660,6 +665,14 @@ class GameState extends ChangeNotifier {
   /// Initialize unit type set (should be called after creating GameState)
   Future<void> loadUnitTypeSet(String setName) async {
     unitTypeSet = await UnitTypeConfigLoader.loadUnitTypeSet(setName);
+  }
+
+  /// Toggle hexagon orientation between flat and pointy
+  void toggleHexOrientation() {
+    hexOrientation = hexOrientation == HexOrientation.flat
+        ? HexOrientation.pointy
+        : HexOrientation.flat;
+    notifyListeners();
   }
 
   /// Compatibility method to convert UnitType enum to string

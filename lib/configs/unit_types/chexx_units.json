@@ -12,6 +12,7 @@
       "movement_type": "adjacent",
       "is_incrementable": true,
       "symbol": "M",
+      "game_type": "chexx",
       "description": "Basic unit with minimal stats but can be incremented"
     },
     "scout": {
@@ -23,6 +24,7 @@
       "movement_type": "straight_line",
       "is_incrementable": false,
       "symbol": "S",
+      "game_type": "chexx",
       "description": "Fast moving unit with long range attacks"
     },
     "knight": {
@@ -34,6 +36,7 @@
       "movement_type": "l_shaped",
       "is_incrementable": false,
       "symbol": "K",
+      "game_type": "chexx",
       "description": "Strong unit with L-shaped movement pattern"
     },
     "guardian": {
@@ -48,6 +51,7 @@
       },
       "is_incrementable": true,
       "symbol": "G",
+      "game_type": "chexx",
       "description": "Defensive unit that can swap positions with friendly units"
     }
   }

@@ -1,0 +1,33 @@
+{
+  "name": "WWII Game System",
+  "description": "World War II tactical game system with action cards",
+  "version": "1.0.0",
+  "id": "wwii",
+  "turn_system": {
+    "type": "single_unit_per_turn",
+    "description": "Players can only move and attack with one unit per turn"
+  },
+  "resources": {
+    "action_cards": {
+      "enabled": true,
+      "cards_per_player": 5,
+      "configurable": true,
+      "min_cards": 3,
+      "max_cards": 10
+    },
+    "time_limit": {
+      "enabled": true,
+      "seconds_per_turn": 45
+    }
+  },
+  "combat": {
+    "damage_system": "wwii_combat",
+    "description": "WWII-style combat with action cards and terrain modifiers"
+  },
+  "meta_abilities": {
+    "enabled": false,
+    "spawn_cost": 0,
+    "heal_cost": 0
+  },
+  "default_unit_set": "wwii"
+}

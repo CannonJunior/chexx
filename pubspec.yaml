@@ -10,8 +10,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
+  flame: ^1.18.0
+  flame_forge2d: ^0.16.0
   oxygen: ^0.3.1
+  cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +26,5 @@ flutter:
     - assets/images/
     - assets/config/
     - lib/configs/unit_types/
+    - lib/configs/game_types/
+    - lib/configs/combat_systems/

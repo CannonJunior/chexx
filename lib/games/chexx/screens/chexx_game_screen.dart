@@ -6,7 +6,11 @@ import '../../../core/interfaces/unit_factory.dart';
 import '../chexx_plugin.dart';
 import '../models/chexx_game_state.dart';
 import 'chexx_game_engine.dart';
-import '../../../src/models/scenario_builder_state.dart'; // For HexOrientation enum
+import '../../../src/models/hex_orientation.dart';
+import '../../../src/systems/combat/die_faces_config.dart';
+import '../../../src/utils/tile_colors.dart';
+import '../../../src/models/game_board.dart';
+import '../../../src/models/hex_coordinate.dart' as src_hex;
 
 /// CHEXX game screen implementation
 class ChexxGameScreen extends StatefulWidget {
@@ -22,6 +26,7 @@ class ChexxGameScreen extends StatefulWidget {
 class _ChexxGameScreenState extends State<ChexxGameScreen> {
   late ChexxGameEngine gameEngine;
   late FocusNode _focusNode;
+  bool _showSettingsPanel = false;
 
   @override
   void initState() {
@@ -204,7 +209,28 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           Positioned(
             top: 80,
             right: 16,
-            child: _buildUnitInfoPanel(_getSelectedUnit(gameState)!),
+            child: Column(
+              children: [
+                _buildUnitInfoPanel(_getSelectedUnit(gameState)!),
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  child: _buildTileInfoPanel(_getSelectedUnit(gameState)!, gameState),
+                ),
+                if (gameState.shouldShowDiceRoll && gameState.lastDiceRolls != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    child: _buildDiceRollDisplay(gameState),
+                  ),
+              ],
+            ),
+          ),
+
+        // Settings panel
+        if (_showSettingsPanel)
+          Positioned(
+            top: 80,
+            left: 16,
+            child: _buildSettingsPanel(gameState),
           ),
       ],
     );
@@ -237,21 +263,25 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 8),
           child: ElevatedButton.icon(
-            onPressed: () => gameEngine.toggleHexOrientation(),
+            onPressed: () {
+              print('DEBUG: TOGGLE BUTTON PRESSED - UI Level');
+              final gameState = gameEngine.gameState as ChexxGameState;
+              gameState.toggleHexOrientation();
+            },
             icon: Icon(
-              gameEngine.hexOrientation == HexOrientation.flat
+              (gameEngine.gameState as ChexxGameState).hexOrientation == HexOrientation.flat
                   ? Icons.hexagon_outlined
                   : Icons.change_history_outlined,
               size: 16,
             ),
             label: Text(
-              gameEngine.hexOrientation == HexOrientation.flat
+              (gameEngine.gameState as ChexxGameState).hexOrientation == HexOrientation.flat
                   ? 'Flat'
                   : 'Pointy',
               style: const TextStyle(fontSize: 12),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: gameEngine.hexOrientation == HexOrientation.flat
+              backgroundColor: (gameEngine.gameState as ChexxGameState).hexOrientation == HexOrientation.flat
                   ? Colors.blue.shade600
                   : Colors.purple.shade600,
               foregroundColor: Colors.white,
@@ -261,20 +291,43 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           ),
         ),
 
-        // Turn counter
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.black54,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            'Turn ${gameState.turnNumber}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
+        // Settings and Turn counter row
+        Row(
+          children: [
+            // Settings icon
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                onPressed: () => setState(() {
+                  _showSettingsPanel = !_showSettingsPanel;
+                }),
+                icon: const Icon(
+                  Icons.settings,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                  shape: const CircleBorder(),
+                ),
+              ),
             ),
-          ),
+            // Turn counter
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                'Turn ${gameState.turnNumber}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -514,5 +567,484 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildSettingsPanel(ChexxGameState gameState) {
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade600,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Game Settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              IconButton(
+                onPressed: () => setState(() {
+                  _showSettingsPanel = false;
+                }),
+                icon: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Game Type
+          _buildSettingsSection('Game Type', [
+            _buildSettingRow('Type', 'CHEXX'),
+            _buildSettingRow('Mode', widget.scenarioConfig != null ? 'Scenario' : 'Standard'),
+            _buildSettingRow('Combat System', 'WWII Dice-based'),
+          ]),
+
+          const SizedBox(height: 12),
+
+          // Unit Types
+          _buildSettingsSection('Available Unit Types', [
+            _buildUnitTypeRow('Minor', 'Basic unit', '1 HP, 1 Move, 1 Attack'),
+            _buildUnitTypeRow('Scout', 'Fast reconnaissance', '2 HP, 3 Move, 1 Attack, Range 3'),
+            _buildUnitTypeRow('Knight', 'Heavy assault', '3 HP, 2 Move, 2 Attack'),
+            _buildUnitTypeRow('Guardian', 'Defensive tank', '3 HP, 1 Move, 1 Attack'),
+          ]),
+
+          const SizedBox(height: 12),
+
+          // Combat System
+          _buildSettingsSection('Combat System', [
+            _buildSettingRow('Type', 'WWII Dice-based'),
+            _buildSettingRow('Die Faces', '6-sided (I/A/G/I/R/S)'),
+            _buildSettingRow('Damage', 'Based on die roll results'),
+            _buildSettingRow('Terrain', 'Affects combat effectiveness'),
+          ]),
+
+          const SizedBox(height: 12),
+
+          // Current Game State
+          _buildSettingsSection('Current Game', [
+            _buildSettingRow('Turn', '${gameState.turnNumber}'),
+            _buildSettingRow('Phase', gameState.turnPhase.toString().split('.').last),
+            _buildSettingRow('Active Player', gameState.currentPlayer.name == 'player1' ? 'Player 1' : 'Player 2'),
+            _buildSettingRow('Units P1', '${gameState.simpleUnits.where((u) => u.owner == Player.player1).length}'),
+            _buildSettingRow('Units P2', '${gameState.simpleUnits.where((u) => u.owner == Player.player2).length}'),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.yellow,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        ...children,
+      ],
+    );
+  }
+
+  Widget _buildSettingRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnitTypeRow(String name, String description, String stats) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+            ),
+          ),
+          Text(
+            stats,
+            style: const TextStyle(
+              color: Colors.cyan,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiceRollDisplay(ChexxGameState gameState) {
+    final diceRolls = gameState.lastDiceRolls!;
+    final result = gameState.lastCombatResult ?? '';
+
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.purple.shade900.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.purple.shade400,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Dice Roll Results',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Dice display
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: diceRolls.asMap().entries.map((entry) {
+              final index = entry.key;
+              final die = entry.value;
+              return _buildDiceWidget(die, index);
+            }).toList(),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Combat result
+          if (result.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                result,
+                style: const TextStyle(
+                  color: Colors.yellow,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+          const SizedBox(height: 4),
+
+          // Auto-clear timer indicator
+          LinearProgressIndicator(
+            value: gameState.shouldShowDiceRoll ? 1.0 -
+              (DateTime.now().difference(gameState.lastCombatTime!).inMilliseconds / 5000.0) : 0.0,
+            backgroundColor: Colors.grey.shade700,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
+            minHeight: 2,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiceWidget(DieFace die, int index) {
+    Color diceColor;
+    switch (die.unitType) {
+      case 'infantry':
+        diceColor = Colors.green.shade600;
+        break;
+      case 'armor':
+        diceColor = Colors.orange.shade600;
+        break;
+      case 'grenade':
+        diceColor = Colors.red.shade600;
+        break;
+      case 'retreat':
+        diceColor = Colors.grey.shade600;
+        break;
+      case 'star':
+        diceColor = Colors.yellow.shade600;
+        break;
+      default:
+        diceColor = Colors.blue.shade600;
+    }
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: diceColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.white,
+          width: 1,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          die.symbol,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTileInfoPanel(SimpleGameUnit unit, ChexxGameState gameState) {
+    // Convert core hex coordinate to src hex coordinate for board tile lookup
+    final srcHexCoord = src_hex.HexCoordinate(unit.position.q, unit.position.r, unit.position.s);
+    final tile = gameState.board.tiles[srcHexCoord];
+
+    if (tile == null) {
+      return Container(
+        width: 200,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade600, width: 2),
+        ),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.terrain,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Tile Info',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(
+              'No tile data',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    String tileTypeName = tile.type.name.substring(0, 1).toUpperCase() +
+                         tile.type.name.substring(1);
+
+    List<String> effectivenessModifiers = _getTileEffectivenessModifiers(tile.type);
+
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade600, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.terrain,
+                color: TileColors.getColorForTileType(tile.type),
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Tile Info',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              const Text(
+                'Type: ',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+              ),
+              Text(
+                tileTypeName,
+                style: TextStyle(
+                  color: TileColors.getColorForTileType(tile.type),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+
+          if (effectivenessModifiers.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Effects:',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...effectivenessModifiers.map((modifier) => Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 2),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.arrow_right,
+                    color: Colors.white54,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      modifier,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<String> _getTileEffectivenessModifiers(HexType tileType) {
+    switch (tileType) {
+      case HexType.forest:
+        return [
+          '+1 Defense vs ranged attacks',
+          'Blocks line of sight',
+          '-1 Movement penalty'
+        ];
+      case HexType.hill:
+        return [
+          '+1 Attack from elevation',
+          '+1 Defense advantage',
+          'Extended vision range'
+        ];
+      case HexType.ocean:
+        return [
+          'Impassable to ground units',
+          'Naval units only'
+        ];
+      case HexType.beach:
+        return [
+          '+1 Movement from land',
+          'Landing zone for naval'
+        ];
+      case HexType.town:
+        return [
+          '+2 Defense when occupied',
+          'Healing +1 HP per turn',
+          'Supply depot'
+        ];
+      case HexType.hedgerow:
+        return [
+          '+2 Defense vs frontal attacks',
+          'Blocks movement',
+          'Flanking vulnerable'
+        ];
+      case HexType.blocked:
+        return [
+          'Impassable terrain',
+          'Blocks line of sight'
+        ];
+      case HexType.meta:
+        return [
+          'Special abilities enabled',
+          'Strategic importance'
+        ];
+      case HexType.normal:
+        return [
+          'No special effects'
+        ];
+    }
   }
 }

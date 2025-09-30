@@ -3,12 +3,15 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:math';
+import '../utils/tile_colors.dart';
 import '../models/scenario_builder_state.dart';
 import '../models/hex_coordinate.dart';
 import '../models/game_unit.dart';
 import '../models/game_board.dart';
 import '../models/game_state.dart';
 import '../models/unit_type_config.dart';
+import '../models/game_type_config.dart';
+import '../models/hex_orientation.dart';
 import '../engine/game_engine.dart';
 import '../../core/interfaces/unit_factory.dart';
 
@@ -33,6 +36,11 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   String currentUnitSetName = 'chexx';
   final Map<String, String> availableUnitSets = UnitTypeConfigLoader.getAvailableSetDisplayNames();
 
+  // Game type configuration
+  GameTypeConfig? currentGameTypeConfig;
+  String currentGameTypeId = 'chexx';
+  final Map<String, String> availableGameTypes = GameTypeConfigLoader.getAvailableGameTypeDisplayNames();
+
   @override
   void initState() {
     super.initState();
@@ -44,7 +52,8 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       builderState.loadFromScenarioData(widget.initialScenarioData!);
     }
 
-    // Load default unit type set
+    // Load default game type and unit type set
+    _loadGameType(currentGameTypeId);
     _loadUnitTypeSet(currentUnitSetName);
 
     // Request focus for keyboard input
@@ -57,6 +66,42 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   void dispose() {
     _focusNode.dispose();
     super.dispose();
+  }
+
+  /// Load a game type configuration
+  Future<void> _loadGameType(String gameTypeId) async {
+    try {
+      final gameTypeConfig = await GameTypeConfigLoader.loadGameTypeConfig(gameTypeId);
+      setState(() {
+        currentGameTypeConfig = gameTypeConfig;
+        currentGameTypeId = gameTypeId;
+      });
+
+      // Pass the game type config to the builder state
+      builderState.setCurrentGameTypeConfig(gameTypeConfig);
+
+      // Auto-load the default unit set for this game type
+      if (gameTypeConfig.defaultUnitSet != currentUnitSetName) {
+        _loadUnitTypeSet(gameTypeConfig.defaultUnitSet);
+      }
+    } catch (e) {
+      // Show error dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error Loading Game Type'),
+            content: Text('Failed to load game type "$gameTypeId": $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   /// Load a unit type set and update available unit templates
@@ -164,14 +209,77 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
   /// Get display name from config or fallback to enum
   String _getActualUnitName(UnitTemplate template) {
+    print('DEBUG: _getActualUnitName - Template ID: ${template.id}, Type: ${template.type.name}');
+
     final config = _getUnitConfigFromTemplate(template);
-    return config?.name ?? _getUnitTypeName(template.type);
+    if (config != null) {
+      print('DEBUG: _getActualUnitName - Using config name: ${config.name}');
+      return config.name;
+    }
+
+    // Extract unit type from template ID for WWII units
+    if (template.id.contains('_')) {
+      final parts = template.id.split('_');
+      if (parts.length > 1) {
+        final unitTypeFromId = parts[1]; // e.g., "p1_infantry" -> "infantry"
+        print('DEBUG: _getActualUnitName - Extracted from ID: $unitTypeFromId');
+
+        // Convert to proper display names
+        switch (unitTypeFromId.toLowerCase()) {
+          case 'infantry':
+            print('VALIDATION TEST: Unit name display - Infantry unit correctly identified and named');
+            return 'Infantry';
+          case 'armor':
+            print('VALIDATION TEST: Unit name display - Armor unit correctly identified and named');
+            return 'Armor';
+          case 'artillery':
+            print('VALIDATION TEST: Unit name display - Artillery unit correctly identified and named');
+            return 'Artillery';
+          default:
+            print('DEBUG: _getActualUnitName - Unknown type from ID, falling back to enum');
+            return _getUnitTypeName(template.type);
+        }
+      }
+    }
+
+    print('DEBUG: _getActualUnitName - Falling back to enum name');
+    return _getUnitTypeName(template.type);
   }
 
   /// Get display symbol from config or fallback to enum
   String _getActualUnitSymbol(UnitTemplate template) {
+    print('DEBUG: _getActualUnitSymbol - Template ID: ${template.id}, Type: ${template.type.name}');
+
     final config = _getUnitConfigFromTemplate(template);
-    return config?.symbol ?? _getUnitSymbol(template.type);
+    if (config != null) {
+      print('DEBUG: _getActualUnitSymbol - Using config symbol: ${config.symbol}');
+      return config.symbol;
+    }
+
+    // Extract unit type from template ID for WWII units
+    if (template.id.contains('_')) {
+      final parts = template.id.split('_');
+      if (parts.length > 1) {
+        final unitTypeFromId = parts[1]; // e.g., "p1_infantry" -> "infantry"
+        print('DEBUG: _getActualUnitSymbol - Extracted from ID: $unitTypeFromId');
+
+        // Convert to proper symbols for WWII units
+        switch (unitTypeFromId.toLowerCase()) {
+          case 'infantry':
+            return 'I';
+          case 'armor':
+            return 'A';
+          case 'artillery':
+            return 'R';
+          default:
+            print('DEBUG: _getActualUnitSymbol - Unknown type from ID, falling back to enum');
+            return _getUnitSymbol(template.type);
+        }
+      }
+    }
+
+    print('DEBUG: _getActualUnitSymbol - Falling back to enum symbol');
+    return _getUnitSymbol(template.type);
   }
 
   @override
@@ -244,6 +352,46 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(8),
                 children: [
+                  // Game Type Section
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Game Type',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.gamepad, color: Colors.white, size: 18),
+                        tooltip: 'Load Game Type',
+                        onSelected: (String gameTypeId) {
+                          _loadGameType(gameTypeId);
+                        },
+                        itemBuilder: (BuildContext context) {
+                          return availableGameTypes.entries.map((entry) {
+                            final isSelected = entry.key == currentGameTypeId;
+                            return PopupMenuItem<String>(
+                              value: entry.key,
+                              child: Row(
+                                children: [
+                                  if (isSelected)
+                                    const Icon(Icons.check, size: 16, color: Colors.green),
+                                  if (isSelected) const SizedBox(width: 8),
+                                  Expanded(child: Text(entry.value)),
+                                ],
+                              ),
+                            );
+                          }).toList();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
                   Row(
                     children: [
                       Expanded(
@@ -374,15 +522,15 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           spacing: 4,
           runSpacing: 4,
           children: [
-            _buildTileTypeButton(HexType.normal, 'Normal', Colors.green.shade200),
-            _buildTileTypeButton(HexType.meta, 'Meta', Colors.purple.shade300),
-            _buildTileTypeButton(HexType.blocked, 'Blocked', Colors.grey.shade600),
-            _buildTileTypeButton(HexType.ocean, 'Ocean', Colors.blue.shade300),
-            _buildTileTypeButton(HexType.beach, 'Beach', Colors.amber.shade200),
-            _buildTileTypeButton(HexType.hill, 'Hill', Colors.brown.shade300),
-            _buildTileTypeButton(HexType.town, 'Town', Colors.grey.shade400),
-            _buildTileTypeButton(HexType.forest, 'Forest', Colors.green.shade600),
-            _buildTileTypeButton(HexType.hedgerow, 'Hedgerow', Colors.green.shade800),
+            _buildTileTypeButton(HexType.normal, 'Normal', TileColors.getButtonColorForTileType(HexType.normal)),
+            _buildTileTypeButton(HexType.meta, 'Meta', TileColors.getButtonColorForTileType(HexType.meta)),
+            _buildTileTypeButton(HexType.blocked, 'Blocked', TileColors.getButtonColorForTileType(HexType.blocked)),
+            _buildTileTypeButton(HexType.ocean, 'Ocean', TileColors.getButtonColorForTileType(HexType.ocean)),
+            _buildTileTypeButton(HexType.beach, 'Beach', TileColors.getButtonColorForTileType(HexType.beach)),
+            _buildTileTypeButton(HexType.hill, 'Hill', TileColors.getButtonColorForTileType(HexType.hill)),
+            _buildTileTypeButton(HexType.town, 'Town', TileColors.getButtonColorForTileType(HexType.town)),
+            _buildTileTypeButton(HexType.forest, 'Forest', TileColors.getButtonColorForTileType(HexType.forest)),
+            _buildTileTypeButton(HexType.hedgerow, 'Hedgerow', TileColors.getButtonColorForTileType(HexType.hedgerow)),
             _buildSpecialModeButton('Create New', Colors.blue.shade300, isCreateNew: true),
             _buildSpecialModeButton('Remove', Colors.red.shade400, isRemove: true),
           ],
@@ -1822,26 +1970,7 @@ class ScenarioBuilderPainter extends CustomPainter {
   }
 
   Color _getTileTypeColor(HexType type) {
-    switch (type) {
-      case HexType.normal:
-        return Colors.lightGreen.shade100;
-      case HexType.meta:
-        return Colors.purple.shade200;
-      case HexType.blocked:
-        return Colors.grey.shade600;
-      case HexType.ocean:
-        return Colors.blue.shade300;
-      case HexType.beach:
-        return Colors.amber.shade200;
-      case HexType.hill:
-        return Colors.brown.shade300;
-      case HexType.town:
-        return Colors.grey.shade400;
-      case HexType.forest:
-        return Colors.green.shade600;
-      case HexType.hedgerow:
-        return Colors.green.shade800;
-    }
+    return TileColors.getColorForTileType(type);
   }
 
   @override

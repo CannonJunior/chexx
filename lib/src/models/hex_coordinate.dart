@@ -1,5 +1,5 @@
 import 'dart:math';
-import 'scenario_builder_state.dart'; // For HexOrientation enum
+import 'hex_orientation.dart';
 
 /// Represents a hexagonal coordinate using the cube coordinate system
 /// where q + r + s = 0, providing symmetrical calculations

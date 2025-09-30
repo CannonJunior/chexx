@@ -12,6 +12,8 @@ import '../../../core/components/selection_component.dart';
 import '../../../core/models/game_config.dart';
 import '../../../src/models/game_board.dart';
 import '../../../src/models/hex_coordinate.dart';
+import '../../../src/models/hex_orientation.dart';
+import '../../../src/systems/combat/die_faces_config.dart';
 
 /// Simple unit representation for temporary use
 class SimpleGameUnit {
@@ -42,11 +44,19 @@ class ChexxGameState extends GameStateBase {
   int player1Rewards = 0;
   int player2Rewards = 0;
 
+  // Hex orientation for rendering
+  HexOrientation hexOrientation = HexOrientation.flat;
+
   // Game board
   final GameBoard board = GameBoard();
 
   // Temporary: Simple unit storage until ECS is working
   List<SimpleGameUnit> simpleUnits = [];
+
+  // Dice roll state for combat display
+  List<DieFace>? lastDiceRolls;
+  String? lastCombatResult;
+  DateTime? lastCombatTime;
 
   @override
   void initializeGame() {
@@ -57,10 +67,22 @@ class ChexxGameState extends GameStateBase {
 
   @override
   void initializeFromScenario(Map<String, dynamic> scenarioConfig) {
+    print('DEBUG: INITIALIZE FROM SCENARIO START');
+    print('DEBUG: Scenario config keys: ${scenarioConfig.keys.toList()}');
+    print('DEBUG: Scenario config size: ${scenarioConfig.length}');
+
     gamePhase = GamePhase.playing;
+
+    print('DEBUG: About to load board tiles from scenario');
     _loadBoardTilesFromScenario(scenarioConfig);
+    print('DEBUG: Finished loading board tiles, total tiles now: ${board.allTiles.length}');
+
+    print('DEBUG: About to load units from scenario');
     _loadUnitsFromScenario(scenarioConfig);
+    print('DEBUG: Finished loading units, total units now: ${simpleUnits.length}');
+
     _calculateAvailableActions();
+    print('DEBUG: INITIALIZE FROM SCENARIO END');
   }
 
   @override
@@ -340,13 +362,18 @@ class ChexxGameState extends GameStateBase {
 
   /// Load board tiles from scenario configuration
   void _loadBoardTilesFromScenario(Map<String, dynamic> scenarioConfig) {
+    print('DEBUG: BOARD TILES LOADING START');
+    print('DEBUG: Scenario contains board_tiles key: ${scenarioConfig.containsKey('board_tiles')}');
+    print('DEBUG: Current board has ${board.allTiles.length} tiles before loading');
+
     // Load board tiles (if saved in scenario)
     if (scenarioConfig.containsKey('board_tiles')) {
       // Clear the default board and load custom board state
+      print('DEBUG: Clearing default board tiles');
       board.tiles.clear();
 
       final boardTiles = scenarioConfig['board_tiles'] as List<dynamic>;
-      print('Loading ${boardTiles.length} board tiles from scenario');
+      print('DEBUG: Loading ${boardTiles.length} board tiles from scenario');
 
       for (final tileData in boardTiles) {
         try {
@@ -364,17 +391,51 @@ class ChexxGameState extends GameStateBase {
             orElse: () => HexType.normal,
           );
 
+          print('DEBUG: Adding tile at ($coord) with type $tileType');
           board.addTile(coord, tileType);
         } catch (e) {
-          print('Error loading board tile: $e');
+          print('DEBUG: Error loading board tile: $e');
         }
       }
 
-      print('Successfully loaded ${board.allTiles.length} board tiles from scenario');
+      print('DEBUG: Successfully loaded ${board.allTiles.length} board tiles from scenario');
     } else {
-      print('No board_tiles found in scenario, using default board');
+      print('DEBUG: No board_tiles found in scenario, using default board');
+      print('DEBUG: Default board has ${board.allTiles.length} tiles after initialization');
       // Keep the default board initialized by GameBoard constructor
     }
+
+    // Validation test for board tile loading
+    final totalTiles = board.allTiles.length;
+    final metaTileCount = board.allTiles.where((tile) => tile.type == HexType.meta).length;
+    final normalTileCount = board.allTiles.where((tile) => tile.type == HexType.normal).length;
+
+    print('VALIDATION TEST: Board tile loading - Total tiles: $totalTiles, Normal: $normalTileCount, Meta: $metaTileCount');
+    print('VALIDATION TEST: Board tile loading - Has tiles loaded: ${totalTiles > 0}');
+
+    if (totalTiles > 0) {
+      print('VALIDATION TEST: Board tile loading - PASS: Board tiles successfully loaded');
+    } else {
+      print('VALIDATION TEST: Board tile loading - FAIL: No board tiles loaded');
+    }
+
+    print('DEBUG: BOARD TILES LOADING END');
+  }
+
+  /// Toggle hexagon orientation between flat and pointy
+  void toggleHexOrientation() {
+    print('DEBUG: TOGGLE HEX ORIENTATION - Before: ${hexOrientation.name}');
+    hexOrientation = hexOrientation == HexOrientation.flat
+        ? HexOrientation.pointy
+        : HexOrientation.flat;
+    print('DEBUG: TOGGLE HEX ORIENTATION - After: ${hexOrientation.name}');
+    print('DEBUG: TOGGLE HEX ORIENTATION - notifyListeners() called');
+
+    // Validation test
+    final expectedOrientation = hexOrientation == HexOrientation.flat ? 'flat' : 'pointy';
+    print('VALIDATION TEST: Hex orientation toggle - Expected: $expectedOrientation, Actual: ${hexOrientation.name}, PASS: ${expectedOrientation == hexOrientation.name}');
+
+    notifyListeners();
   }
 
   /// Convert core HexCoordinate to board HexCoordinate
@@ -456,12 +517,37 @@ class ChexxGameState extends GameStateBase {
 
   // Helper methods for unit stats
   String _getUnitDisplayName(String unitType) {
-    switch (unitType) {
-      case 'minor': return 'Minor Unit';
-      case 'scout': return 'Scout';
-      case 'knight': return 'Knight';
-      case 'guardian': return 'Guardian';
-      default: return 'Unknown';
+    print('DEBUG: _getUnitDisplayName - Unit type: "$unitType"');
+
+    switch (unitType.toLowerCase()) {
+      // CHEXX unit types
+      case 'minor':
+        print('VALIDATION TEST: Unit display name - CHEXX Minor unit correctly identified');
+        return 'Minor Unit';
+      case 'scout':
+        print('VALIDATION TEST: Unit display name - CHEXX Scout unit correctly identified');
+        return 'Scout';
+      case 'knight':
+        print('VALIDATION TEST: Unit display name - CHEXX Knight unit correctly identified');
+        return 'Knight';
+      case 'guardian':
+        print('VALIDATION TEST: Unit display name - CHEXX Guardian unit correctly identified');
+        return 'Guardian';
+
+      // WWII unit types
+      case 'infantry':
+        print('VALIDATION TEST: Unit display name - WWII Infantry unit correctly identified');
+        return 'Infantry';
+      case 'armor':
+        print('VALIDATION TEST: Unit display name - WWII Armor unit correctly identified');
+        return 'Armor';
+      case 'artillery':
+        print('VALIDATION TEST: Unit display name - WWII Artillery unit correctly identified');
+        return 'Artillery';
+
+      default:
+        print('VALIDATION ERROR: Unit display name - Unknown unit type: "$unitType"');
+        return 'Unknown';
     }
   }
 
@@ -535,5 +621,27 @@ class ChexxGameState extends GameStateBase {
         simpleUnits[i] = resetUnit;
       }
     }
+  }
+
+  /// Record dice roll results for display
+  void recordDiceRoll(List<DieFace> diceRolls, String combatResult) {
+    lastDiceRolls = diceRolls;
+    lastCombatResult = combatResult;
+    lastCombatTime = DateTime.now();
+    notifyListeners();
+  }
+
+  /// Clear dice roll display
+  void clearDiceRoll() {
+    lastDiceRolls = null;
+    lastCombatResult = null;
+    lastCombatTime = null;
+    notifyListeners();
+  }
+
+  /// Check if dice roll should still be displayed (5 seconds)
+  bool get shouldShowDiceRoll {
+    if (lastCombatTime == null) return false;
+    return DateTime.now().difference(lastCombatTime!).inSeconds < 5;
   }
 }

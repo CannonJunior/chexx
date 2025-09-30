@@ -1,0 +1,30 @@
+{
+  "name": "CHEXX Game System",
+  "description": "The classic CHEXX tactical game system",
+  "version": "1.0.0",
+  "id": "chexx",
+  "turn_system": {
+    "type": "multiple_units_per_turn",
+    "description": "Players can move and attack with multiple units per turn"
+  },
+  "resources": {
+    "action_cards": {
+      "enabled": false,
+      "cards_per_player": 0
+    },
+    "time_limit": {
+      "enabled": true,
+      "seconds_per_turn": 30
+    }
+  },
+  "combat": {
+    "damage_system": "standard",
+    "description": "Standard damage based on unit attack values"
+  },
+  "meta_abilities": {
+    "enabled": true,
+    "spawn_cost": 1,
+    "heal_cost": 1
+  },
+  "default_unit_set": "chexx"
+}
