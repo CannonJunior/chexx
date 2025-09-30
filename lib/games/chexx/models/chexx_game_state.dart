@@ -13,7 +13,21 @@ import '../../../core/models/game_config.dart';
 import '../../../src/models/game_board.dart';
 import '../../../src/models/hex_coordinate.dart';
 import '../../../src/models/hex_orientation.dart';
+import '../../../src/models/scenario_builder_state.dart';
 import '../../../src/systems/combat/die_faces_config.dart';
+
+/// Structure placed in the game (using core HexCoordinate for compatibility)
+class GameStructure {
+  final StructureType type;
+  final core_hex.HexCoordinate position;
+  final String id;
+
+  const GameStructure({
+    required this.type,
+    required this.position,
+    required this.id,
+  });
+}
 
 /// Simple unit representation for temporary use
 class SimpleGameUnit {
@@ -53,6 +67,9 @@ class ChexxGameState extends GameStateBase {
   // Temporary: Simple unit storage until ECS is working
   List<SimpleGameUnit> simpleUnits = [];
 
+  // Structures storage
+  List<GameStructure> placedStructures = [];
+
   // Dice roll state for combat display
   List<DieFace>? lastDiceRolls;
   String? lastCombatResult;
@@ -80,6 +97,10 @@ class ChexxGameState extends GameStateBase {
     print('DEBUG: About to load units from scenario');
     _loadUnitsFromScenario(scenarioConfig);
     print('DEBUG: Finished loading units, total units now: ${simpleUnits.length}');
+
+    print('DEBUG: About to load structures from scenario');
+    _loadStructuresFromScenario(scenarioConfig);
+    print('DEBUG: Finished loading structures, total structures now: ${placedStructures.length}');
 
     _calculateAvailableActions();
     print('DEBUG: INITIALIZE FROM SCENARIO END');
@@ -339,14 +360,21 @@ class ChexxGameState extends GameStateBase {
           positionData['s'] as int,
         );
 
+        // Check for saved custom health
+        final savedHealth = placement['customHealth'] as int?;
+        final actualHealth = savedHealth ?? _getUnitHealth(unitType);
+        final maxHealth = _getUnitMaxHealth(unitType);
+
+        print('Loading unit: $unitType, savedHealth: $savedHealth, actualHealth: $actualHealth, maxHealth: $maxHealth');
+
         // Create simple unit
         final unit = SimpleGameUnit(
           id: unitId,
           unitType: unitType,
           owner: owner,
           position: position,
-          health: _getUnitHealth(unitType),
-          maxHealth: _getUnitHealth(unitType),
+          health: actualHealth,
+          maxHealth: maxHealth,
           remainingMovement: _getUnitMovement(unitType),
         );
 
@@ -422,6 +450,46 @@ class ChexxGameState extends GameStateBase {
     print('DEBUG: BOARD TILES LOADING END');
   }
 
+  /// Load structures from scenario configuration
+  void _loadStructuresFromScenario(Map<String, dynamic> scenarioConfig) {
+    placedStructures.clear();
+
+    final structurePlacements = scenarioConfig['structure_placements'] as List<dynamic>?;
+    if (structurePlacements == null) {
+      print('No structure_placements found in scenario');
+      return;
+    }
+
+    print('Loading ${structurePlacements.length} structures from scenario');
+
+    for (final structureData in structurePlacements) {
+      try {
+        final template = structureData['template'] as Map<String, dynamic>;
+        final position = structureData['position'] as Map<String, dynamic>;
+
+        final structureType = StructureType.values.firstWhere(
+          (e) => e.toString().split('.').last == template['type'],
+          orElse: () => StructureType.bunker,
+        );
+        final structurePosition = core_hex.HexCoordinate(
+          position['q'] as int,
+          position['r'] as int,
+          position['s'] as int,
+        );
+
+        placedStructures.add(GameStructure(
+          type: structureType,
+          position: structurePosition,
+          id: template['id'] as String,
+        ));
+      } catch (e) {
+        print('Error loading structure: $e');
+      }
+    }
+
+    print('Successfully loaded ${placedStructures.length} structures from scenario');
+  }
+
   /// Toggle hexagon orientation between flat and pointy
   void toggleHexOrientation() {
     print('DEBUG: TOGGLE HEX ORIENTATION - Before: ${hexOrientation.name}');
@@ -456,7 +524,7 @@ class ChexxGameState extends GameStateBase {
       owner: owner,
       position: position,
       health: _getUnitHealth(unitType),
-      maxHealth: _getUnitHealth(unitType),
+      maxHealth: _getUnitMaxHealth(unitType),
       remainingMovement: _getUnitMovement(unitType),
     );
   }
@@ -553,14 +621,36 @@ class ChexxGameState extends GameStateBase {
 
   int _getUnitHealth(String unitType) {
     final health = switch (unitType) {
+      // CHEXX unit types
       'minor' => 1,
       'scout' => 2,
       'knight' => 3,
       'guardian' => 3,
+      // WWII unit types
+      'infantry' => 1,
+      'armor' => 1,
+      'artillery' => 1,
       _ => 1,
     };
     print('Unit type: "$unitType" -> health: $health');
     return health;
+  }
+
+  int _getUnitMaxHealth(String unitType) {
+    final maxHealth = switch (unitType) {
+      // CHEXX unit types
+      'minor' => 2,
+      'scout' => 2,
+      'knight' => 3,
+      'guardian' => 3,
+      // WWII unit types
+      'infantry' => 4,
+      'armor' => 3,
+      'artillery' => 2,
+      _ => 1,
+    };
+    print('Unit type: "$unitType" -> max health: $maxHealth');
+    return maxHealth;
   }
 
   int _getUnitMovement(String unitType) {

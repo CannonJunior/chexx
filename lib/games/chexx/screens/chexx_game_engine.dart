@@ -1,9 +1,11 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:oxygen/oxygen.dart';
 import '../../../src/utils/tile_colors.dart';
 import '../../../core/engine/game_engine_base.dart';
 import '../../../core/models/hex_coordinate.dart';
+import '../../../src/models/hex_orientation.dart';
 import '../../../core/interfaces/game_plugin.dart';
 import '../../../core/interfaces/unit_factory.dart';
 import '../../../core/components/position_component.dart';
@@ -12,6 +14,8 @@ import '../../../core/components/health_component.dart';
 import '../../../core/components/selection_component.dart';
 import '../models/chexx_game_state.dart';
 import '../../../src/models/hex_orientation.dart';
+import '../../../src/models/scenario_builder_state.dart';
+import '../../../src/models/game_board.dart';
 import '../../../src/systems/combat/die_faces_config.dart';
 
 /// CHEXX-specific game engine
@@ -354,7 +358,19 @@ class ChexxGameEngine extends GameEngineBase {
   /// Convert hex coordinate to screen position
   Offset hexToScreen(HexCoordinate hex, Size canvasSize) {
     final hexSize = 50.0; // Same as the other engine
-    final (x, y) = hex.toPixel(hexSize);
+    final currentOrientation = (gameState as ChexxGameState).hexOrientation;
+
+    // Implement orientation-aware pixel conversion
+    late double x, y;
+    if (currentOrientation == HexOrientation.flat) {
+      // Flat-top orientation (original)
+      x = hexSize * (3.0 / 2.0 * hex.q);
+      y = hexSize * (sqrt(3.0) / 2.0 * hex.q + sqrt(3.0) * hex.r);
+    } else {
+      // Pointy-top orientation
+      x = hexSize * (sqrt(3.0) * hex.q + sqrt(3.0) / 2.0 * hex.r);
+      y = hexSize * (3.0 / 2.0 * hex.r);
+    }
 
     final centerX = canvasSize.width / 2;
     final centerY = canvasSize.height / 2;
@@ -405,7 +421,7 @@ class ChexxGamePainter extends CustomPainter {
 
   static final Paint _metaPaint = Paint()
     ..style = PaintingStyle.fill
-    ..color = Colors.purple.shade200;
+    ..color = TileColors.getColorForTileType(HexType.meta);
 
   static final Paint _strokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -441,6 +457,9 @@ class ChexxGamePainter extends CustomPainter {
 
     // Draw hex tiles
     _drawHexTiles(canvas, size, gameState);
+
+    // Draw structures
+    _drawStructures(canvas, size, gameState);
 
     // Draw units
     _drawUnits(canvas, size, gameState);
@@ -488,9 +507,8 @@ class ChexxGamePainter extends CustomPainter {
         }
         path.close();
 
-        // For now, disable meta hex detection until the data structure is available
-        bool isMetaHex = false;
-        // TODO: Add meta hex detection when metaHexes property is available
+        // Check if this tile is a meta hex
+        bool isMetaHex = tile.type == HexType.meta;
 
         // Choose paint based on tile type and meta hex status
         Paint tilePaint = _normalPaint;
@@ -800,9 +818,9 @@ class ChexxGamePainter extends CustomPainter {
     canvas.drawCircle(center, radius, fillPaint);
     canvas.drawCircle(center, radius, strokePaint);
 
-    // Draw health bar if damaged
-    if (health.currentHealth < health.maxHealth) {
-      _drawHealthBar(canvas, center, health);
+    // Draw health indicators as circles (matching scenario builder display)
+    if (health.currentHealth > 1) {
+      _drawHealthIndicators(canvas, center, health.currentHealth);
     }
   }
 
@@ -830,9 +848,9 @@ class ChexxGamePainter extends CustomPainter {
     canvas.drawCircle(center, radius, fillPaint);
     canvas.drawCircle(center, radius, strokePaint);
 
-    // Draw health bar if damaged
-    if (unit.health < unit.maxHealth) {
-      _drawSimpleHealthBar(canvas, center, unit.health, unit.maxHealth);
+    // Draw health indicators as circles (matching scenario builder display)
+    if (unit.health > 1) {
+      _drawHealthIndicators(canvas, center, unit.health);
     }
   }
 
@@ -876,6 +894,123 @@ class ChexxGamePainter extends CustomPainter {
       Rect.fromLTWH(center.dx - barWidth / 2, barY, healthWidth, barHeight),
       Paint()..color = Colors.green.shade600,
     );
+  }
+
+  /// Draw health indicators as small circles below the unit (matching scenario builder)
+  void _drawHealthIndicators(Canvas canvas, Offset center, int health) {
+    const dotRadius = 3.0;
+    const spacing = 8.0;
+    final healthPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.green.shade400;
+
+    final healthStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = Colors.black87;
+
+    // Draw health dots in a line below the unit
+    final startX = center.dx - ((health - 1) * spacing) / 2;
+    final dotY = center.dy + engine.hexSize * 0.6;
+
+    for (int i = 0; i < health; i++) {
+      final dotX = startX + (i * spacing);
+      final dotCenter = Offset(dotX, dotY);
+
+      canvas.drawCircle(dotCenter, dotRadius, healthPaint);
+      canvas.drawCircle(dotCenter, dotRadius, healthStrokePaint);
+    }
+  }
+
+  void _drawStructures(Canvas canvas, Size size, ChexxGameState gameState) {
+    // Access structures from game state
+    for (final placedStructure in gameState.placedStructures) {
+      final center = engine.hexToScreen(placedStructure.position, size);
+      final structureSize = engine.hexSize * 0.9;
+
+      // Get structure color based on type
+      final Color structureColor = _getStructureColor(placedStructure.type);
+
+      // Create paints for structure rendering
+      final fillPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = structureColor;
+
+      final strokePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..color = structureColor.withOpacity(0.8)
+        ..strokeWidth = 2.0;
+
+      // Draw structure shape based on type (same as scenario builder)
+      switch (placedStructure.type) {
+        case StructureType.bunker:
+          // Draw bunker as a square
+          final rect = Rect.fromCenter(center: center, width: structureSize, height: structureSize);
+          canvas.drawRect(rect, fillPaint);
+          canvas.drawRect(rect, strokePaint);
+          break;
+        case StructureType.bridge:
+          // Draw bridge as a rounded rectangle
+          final rect = Rect.fromCenter(center: center, width: structureSize * 1.2, height: structureSize * 0.6);
+          final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+          canvas.drawRRect(rrect, fillPaint);
+          canvas.drawRRect(rrect, strokePaint);
+          break;
+        case StructureType.sandbag:
+          // Draw sandbag as multiple small circles
+          final radius = structureSize * 0.15;
+          for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 2; j++) {
+              final offset = Offset(center.dx + (i - 1) * radius * 1.5, center.dy + (j - 0.5) * radius * 1.5);
+              canvas.drawCircle(offset, radius, fillPaint);
+              canvas.drawCircle(offset, radius, strokePaint);
+            }
+          }
+          break;
+        case StructureType.barbwire:
+          // Draw barbwire as zigzag lines
+          final path = Path();
+          final startX = center.dx - structureSize * 0.4;
+          final endX = center.dx + structureSize * 0.4;
+          final y = center.dy;
+          path.moveTo(startX, y);
+          for (double x = startX; x < endX; x += structureSize * 0.1) {
+            final isUp = ((x - startX) / (structureSize * 0.1)).round() % 2 == 0;
+            path.lineTo(x, y + (isUp ? -structureSize * 0.1 : structureSize * 0.1));
+          }
+          path.lineTo(endX, y);
+          canvas.drawPath(path, strokePaint);
+          break;
+        case StructureType.dragonsTeeth:
+          // Draw dragon's teeth as triangles
+          final path = Path();
+          for (int i = 0; i < 3; i++) {
+            final x = center.dx + (i - 1) * structureSize * 0.3;
+            path.moveTo(x, center.dy + structureSize * 0.2);
+            path.lineTo(x - structureSize * 0.1, center.dy - structureSize * 0.2);
+            path.lineTo(x + structureSize * 0.1, center.dy - structureSize * 0.2);
+            path.close();
+          }
+          canvas.drawPath(path, fillPaint);
+          canvas.drawPath(path, strokePaint);
+          break;
+      }
+    }
+  }
+
+  Color _getStructureColor(StructureType type) {
+    switch (type) {
+      case StructureType.bunker:
+        return Colors.brown.shade600;
+      case StructureType.bridge:
+        return Colors.grey.shade400;
+      case StructureType.sandbag:
+        return Colors.brown.shade300;
+      case StructureType.barbwire:
+        return Colors.grey.shade700;
+      case StructureType.dragonsTeeth:
+        return Colors.grey.shade600;
+    }
   }
 
   @override

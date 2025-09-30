@@ -477,47 +477,68 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
   }
 
   String _getUnitTypeName(String unitType) {
-    switch (unitType) {
+    switch (unitType.toLowerCase()) {
+      // CHEXX unit types
       case 'minor': return 'Minor Unit';
       case 'scout': return 'Scout';
       case 'knight': return 'Knight';
       case 'guardian': return 'Guardian';
+      // WWII unit types
+      case 'infantry': return 'Infantry';
+      case 'armor': return 'Armor';
+      case 'artillery': return 'Artillery';
       default: return 'Unknown';
     }
   }
 
   int _getMovementRange(String unitType) {
-    switch (unitType) {
+    switch (unitType.toLowerCase()) {
+      // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 3;
       case 'knight': return 2;
       case 'guardian': return 1;
+      // WWII unit types
+      case 'infantry': return 1;
+      case 'armor': return 2;
+      case 'artillery': return 1;
       default: return 1;
     }
   }
 
   int _getAttackRange(String unitType) {
-    switch (unitType) {
+    switch (unitType.toLowerCase()) {
+      // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 3;
       case 'knight': return 2;
       case 'guardian': return 1;
+      // WWII unit types
+      case 'infantry': return 1;
+      case 'armor': return 2;
+      case 'artillery': return 3;
       default: return 1;
     }
   }
 
   int _getAttackDamage(String unitType) {
-    switch (unitType) {
+    switch (unitType.toLowerCase()) {
+      // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 1;
       case 'knight': return 2;
       case 'guardian': return 1;
+      // WWII unit types
+      case 'infantry': return 1;
+      case 'armor': return 2;
+      case 'artillery': return 3;
       default: return 1;
     }
   }
 
   List<Widget> _buildUnitAbilities(String unitType) {
-    switch (unitType) {
+    switch (unitType.toLowerCase()) {
+      // CHEXX unit types
       case 'scout':
         return [
           _buildAbilityCard('Long Range', 'Attack range +2'),
@@ -531,9 +552,25 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           _buildAbilityCard('Defensive', 'High health unit'),
         ];
       case 'minor':
-      default:
         return [
           _buildAbilityCard('Basic Unit', 'Standard combat'),
+        ];
+      // WWII unit types
+      case 'infantry':
+        return [
+          _buildAbilityCard('Basic Infantry', 'Standard ground combat'),
+        ];
+      case 'armor':
+        return [
+          _buildAbilityCard('Armored Vehicle', 'High mobility and firepower'),
+        ];
+      case 'artillery':
+        return [
+          _buildAbilityCard('Long Range Fire', 'Extended attack range'),
+        ];
+      default:
+        return [
+          _buildAbilityCard('Unknown Unit', 'No special abilities'),
         ];
     }
   }
