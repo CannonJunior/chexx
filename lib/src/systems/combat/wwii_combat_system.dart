@@ -1,22 +1,27 @@
 import 'dart:math';
-import '../../../models/game_unit.dart';
-import '../../../models/unit_type_config.dart';
+import '../../models/game_unit.dart';
+import '../../models/unit_type_config.dart';
+import '../../config/wwii_game_config.dart';
 import 'die_faces_config.dart';
 
 /// Result of a single die roll in combat
 class DieRollResult {
   final DieFace face;
-  final bool isHit;
+  final CombatHitResult hitResult;
   final int effectivenessModifier;
 
   const DieRollResult({
     required this.face,
-    required this.isHit,
+    required this.hitResult,
     required this.effectivenessModifier,
   });
 
+  bool get isHit => hitResult == CombatHitResult.hit;
+  bool get isRetreat => hitResult == CombatHitResult.retreat;
+  bool get isCardAction => hitResult == CombatHitResult.cardAction;
+
   @override
-  String toString() => 'Roll: ${face.symbol} (${isHit ? "Hit" : "Miss"}) modifier: $effectivenessModifier';
+  String toString() => 'Roll: ${face.symbol} (${hitResult.name}) modifier: $effectivenessModifier';
 }
 
 /// Complete result of a combat attack
@@ -26,6 +31,8 @@ class CombatResult {
   final List<DieRollResult> dieRolls;
   final int totalDamage;
   final bool defenderDestroyed;
+  final bool hasRetreats;
+  final bool hasCardActions;
 
   const CombatResult({
     required this.attacker,
@@ -33,15 +40,20 @@ class CombatResult {
     required this.dieRolls,
     required this.totalDamage,
     required this.defenderDestroyed,
+    required this.hasRetreats,
+    required this.hasCardActions,
   });
 
   int get hitCount => dieRolls.where((roll) => roll.isHit).length;
-  int get missCount => dieRolls.where((roll) => !roll.isHit).length;
+  int get missCount => dieRolls.where((roll) => roll.hitResult == CombatHitResult.miss).length;
+  int get retreatCount => dieRolls.where((roll) => roll.isRetreat).length;
+  int get cardActionCount => dieRolls.where((roll) => roll.isCardAction).length;
 
   @override
   String toString() {
     return 'Combat: ${attacker.unitTypeId} vs ${defender.unitTypeId} - '
-           '${hitCount} hits, ${missCount} misses, ${totalDamage} damage, '
+           '$hitCount hits, $missCount misses, $retreatCount retreats, '
+           '$cardActionCount card actions, $totalDamage damage, '
            '${defenderDestroyed ? "destroyed" : "survived"}';
   }
 }
@@ -49,12 +61,15 @@ class CombatResult {
 /// WWII-style die-based combat system
 class WWIICombatSystem {
   final DieFacesConfig _dieFacesConfig;
+  final WWIIHitLookupTables _hitLookupTables;
   final Random _random;
 
   WWIICombatSystem({
     required DieFacesConfig dieFacesConfig,
+    required WWIIHitLookupTables hitLookupTables,
     Random? random,
   }) : _dieFacesConfig = dieFacesConfig,
+       _hitLookupTables = hitLookupTables,
        _random = random ?? Random();
 
   /// Execute a combat attack between attacker and defender
@@ -81,10 +96,9 @@ class WWIICombatSystem {
     for (int i = 0; i < dieRollCount; i++) {
       final rolledFace = _dieFacesConfig.rollDie(_random);
 
-      // Check if this roll hits the target
-      final isHit = _evaluateHit(
+      // Check hit result using lookup tables
+      final hitResult = _evaluateHit(
         rolledFace,
-        attackerConfig,
         defenderConfig,
       );
 
@@ -96,14 +110,14 @@ class WWIICombatSystem {
 
       final rollResult = DieRollResult(
         face: rolledFace,
-        isHit: isHit,
+        hitResult: hitResult,
         effectivenessModifier: effectivenessModifier,
       );
 
       dieRolls.add(rollResult);
 
       // Calculate damage for this roll
-      if (isHit && effectivenessModifier >= 0) {
+      if (rollResult.isHit && effectivenessModifier >= 0) {
         final baseDamage = attackDamageArray[i];
         // Add effectiveness modifier as additional damage
         final finalDamage = baseDamage + effectivenessModifier;
@@ -112,58 +126,40 @@ class WWIICombatSystem {
     }
 
     // Apply damage to defender
-    final newDefenderHealth = (defender.health - totalDamage).clamp(0, defenderConfig.maxHealth);
+    final newDefenderHealth = (defender.currentHealth - totalDamage).clamp(0, defender.maxHealth);
     final defenderDestroyed = newDefenderHealth <= 0;
 
-    // Update defender health
-    final updatedDefender = GameUnit(
-      id: defender.id,
-      unitTypeId: defender.unitTypeId,
-      playerId: defender.playerId,
-      position: defender.position,
-      health: newDefenderHealth,
-    );
+    // Update defender health (modifying in place)
+    defender.currentHealth = newDefenderHealth;
+    if (defenderDestroyed) {
+      defender.state = UnitState.dead;
+    }
+
+    // Check for special combat results
+    final hasRetreats = dieRolls.any((roll) => roll.isRetreat);
+    final hasCardActions = dieRolls.any((roll) => roll.isCardAction);
 
     return CombatResult(
       attacker: attacker,
-      defender: updatedDefender,
+      defender: defender,
       dieRolls: dieRolls,
       totalDamage: totalDamage,
       defenderDestroyed: defenderDestroyed,
+      hasRetreats: hasRetreats,
+      hasCardActions: hasCardActions,
     );
   }
 
-  /// Evaluate if a die roll results in a hit
-  bool _evaluateHit(
+  /// Evaluate combat result using lookup tables
+  CombatHitResult _evaluateHit(
     DieFace rolledFace,
-    UnitTypeConfig attackerConfig,
     UnitTypeConfig defenderConfig,
   ) {
-    // Miss faces always miss
-    if (rolledFace.unitType == 'miss') {
-      return false;
-    }
-
-    // Basic hit evaluation: unit types on die faces hit their corresponding targets
-    // This can be expanded with more complex logic
-
-    // Infantry is effective against artillery and other infantry
-    if (rolledFace.unitType == 'infantry') {
-      return defenderConfig.id == 'artillery' || defenderConfig.id == 'infantry';
-    }
-
-    // Armor is effective against infantry and other armor
-    if (rolledFace.unitType == 'armor') {
-      return defenderConfig.id == 'infantry' || defenderConfig.id == 'armor';
-    }
-
-    // Artillery is effective against armor and other artillery
-    if (rolledFace.unitType == 'artillery') {
-      return defenderConfig.id == 'armor' || defenderConfig.id == 'artillery';
-    }
-
-    // Default: no hit
-    return false;
+    // Use the hit lookup tables to determine result
+    return _hitLookupTables.getHitResult(
+      rolledFace.unitType,
+      defenderConfig.id,
+    );
   }
 
   /// Check if an attack is possible between two units
@@ -183,17 +179,17 @@ class WWIICombatSystem {
     }
 
     // Units can't attack friendly units (same player)
-    if (attacker.playerId == defender.playerId) {
+    if (attacker.owner == defender.owner) {
       return false;
     }
 
     // Attacker must be alive
-    if (attacker.health <= 0) {
+    if (attacker.currentHealth <= 0) {
       return false;
     }
 
     // Defender must be alive
-    if (defender.health <= 0) {
+    if (defender.currentHealth <= 0) {
       return false;
     }
 
@@ -214,6 +210,7 @@ class WWIICombatSystem {
 
     final tempCombatSystem = WWIICombatSystem(
       dieFacesConfig: _dieFacesConfig,
+      hitLookupTables: _hitLookupTables,
       random: simulationRandom,
     );
 
@@ -275,8 +272,10 @@ class WWIICombatSystem {
 class WWIICombatSystemFactory {
   static Future<WWIICombatSystem> create({Random? random}) async {
     final dieFacesConfig = await DieFacesConfigLoader.loadDieFacesConfig();
+    final gameConfig = await WWIIGameConfigLoader.loadWWIIGameConfig();
     return WWIICombatSystem(
       dieFacesConfig: dieFacesConfig,
+      hitLookupTables: gameConfig.combat.hitLookupTables,
       random: random,
     );
   }

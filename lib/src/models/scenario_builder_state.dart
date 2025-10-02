@@ -831,6 +831,19 @@ class ScenarioBuilderState extends ChangeNotifier {
 
     // Add scenario-specific data
     baseConfig['scenario_name'] = scenarioName;
+
+    // Save game type information
+    if (currentGameTypeConfig != null) {
+      baseConfig['game_type'] = currentGameTypeConfig!.id;
+      print('DEBUG: Saving game type: ${currentGameTypeConfig!.id}');
+    } else if (_hasWWIIUnits()) {
+      baseConfig['game_type'] = 'wwii';
+      print('DEBUG: Auto-detected WWII game type from units');
+    } else {
+      baseConfig['game_type'] = 'chexx';
+      print('DEBUG: Defaulting to CHEXX game type');
+    }
+
     baseConfig['meta_hex_positions'] = metaHexes.map((hex) => {
       'q': hex.q,
       'r': hex.r,
@@ -963,6 +976,32 @@ class ScenarioBuilderState extends ChangeNotifier {
       // Load scenario name
       if (scenarioData.containsKey('scenario_name')) {
         scenarioName = scenarioData['scenario_name'] as String;
+      }
+
+      // Load game type configuration
+      if (scenarioData.containsKey('game_type')) {
+        final gameTypeId = scenarioData['game_type'] as String;
+        print('DEBUG: Loading game type: $gameTypeId');
+        try {
+          // Load the game type configuration asynchronously
+          GameTypeConfigLoader.loadGameTypeConfig(gameTypeId).then((gameTypeConfig) {
+            currentGameTypeConfig = gameTypeConfig;
+            print('DEBUG: Successfully loaded game type config: ${gameTypeConfig.name}');
+            notifyListeners();
+          }).catchError((error) {
+            print('Error loading game type config for $gameTypeId: $error');
+            // Fallback to default (chexx)
+            GameTypeConfigLoader.loadGameTypeConfig('chexx').then((defaultConfig) {
+              currentGameTypeConfig = defaultConfig;
+              print('DEBUG: Loaded fallback chexx game type config');
+              notifyListeners();
+            });
+          });
+        } catch (e) {
+          print('Error loading game type: $e');
+        }
+      } else {
+        print('DEBUG: No game_type in scenario data, keeping current game type config');
       }
 
       // Load board tiles (if saved in scenario)

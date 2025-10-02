@@ -11,6 +11,7 @@ import '../../../src/systems/combat/die_faces_config.dart';
 import '../../../src/utils/tile_colors.dart';
 import '../../../src/models/game_board.dart';
 import '../../../src/models/hex_coordinate.dart' as src_hex;
+import '../../../src/models/game_state.dart';
 
 /// CHEXX game screen implementation
 class ChexxGameScreen extends StatefulWidget {
@@ -649,32 +650,19 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Game Type
-          _buildSettingsSection('Game Type', [
-            _buildSettingRow('Type', 'CHEXX'),
+          // Combat System
+          _buildSettingsSection('Combat System', [
+            _buildSettingRow('Type', 'wwii'),
             _buildSettingRow('Mode', widget.scenarioConfig != null ? 'Scenario' : 'Standard'),
-            _buildSettingRow('Combat System', 'WWII Dice-based'),
+            _buildSettingRow('Die Faces', '6-sided (I/A/G/I/R/S)'),
+            _buildSettingRow('Damage', 'Based on die roll results'),
+            _buildSettingRow('Terrain', 'Affects combat effectiveness'),
           ]),
 
           const SizedBox(height: 12),
 
           // Unit Types
-          _buildSettingsSection('Available Unit Types', [
-            _buildUnitTypeRow('Minor', 'Basic unit', '1 HP, 1 Move, 1 Attack'),
-            _buildUnitTypeRow('Scout', 'Fast reconnaissance', '2 HP, 3 Move, 1 Attack, Range 3'),
-            _buildUnitTypeRow('Knight', 'Heavy assault', '3 HP, 2 Move, 2 Attack'),
-            _buildUnitTypeRow('Guardian', 'Defensive tank', '3 HP, 1 Move, 1 Attack'),
-          ]),
-
-          const SizedBox(height: 12),
-
-          // Combat System
-          _buildSettingsSection('Combat System', [
-            _buildSettingRow('Type', 'WWII Dice-based'),
-            _buildSettingRow('Die Faces', '6-sided (I/A/G/I/R/S)'),
-            _buildSettingRow('Damage', 'Based on die roll results'),
-            _buildSettingRow('Terrain', 'Affects combat effectiveness'),
-          ]),
+          _buildSettingsSection('Available Unit Types', _getUnitTypeRows()),
 
           const SizedBox(height: 12),
 
@@ -765,6 +753,33 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
         ],
       ),
     );
+  }
+
+  /// Get unit type rows based on game mode (WWII vs CHEXX)
+  List<Widget> _getUnitTypeRows() {
+    final gameState = gameEngine.gameState;
+
+    // Check if we're in WWII mode by checking if card system is initialized
+    // Cast to specific GameState type to access the card system properties
+    if (gameState is GameState) {
+      final specificGameState = gameState as GameState;
+      if (specificGameState.isCardSystemInitialized) {
+        // WWII mode - show WWII unit types
+        return [
+          _buildUnitTypeRow('Infantry', 'Standard infantry unit', '1-4 HP, 2 Move, 1 Range'),
+          _buildUnitTypeRow('Armor', 'Heavy armored unit', '1-3 HP, 3 Move, 2 Range'),
+          _buildUnitTypeRow('Artillery', 'Long-range unit', '1-2 HP, 1 Move, 4 Range'),
+        ];
+      }
+    }
+
+    // CHEXX mode - show default CHEXX unit types
+    return [
+      _buildUnitTypeRow('Minor', 'Basic unit', '1 HP, 1 Move, 1 Attack'),
+      _buildUnitTypeRow('Scout', 'Fast reconnaissance', '2 HP, 3 Move, 1 Attack, Range 3'),
+      _buildUnitTypeRow('Knight', 'Heavy assault', '3 HP, 2 Move, 2 Attack'),
+      _buildUnitTypeRow('Guardian', 'Defensive tank', '3 HP, 1 Move, 1 Attack'),
+    ];
   }
 
   Widget _buildDiceRollDisplay(ChexxGameState gameState) {

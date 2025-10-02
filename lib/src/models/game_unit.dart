@@ -82,7 +82,15 @@ class GameUnit {
   int get attackRange => config.attackRange;
 
   /// Get attack damage based on unit configuration
-  int get attackDamage => config.attackDamage;
+  int get attackDamage {
+    if (config.attackDamage is List<int>) {
+      // For WWII units with array attack damage, return the sum as equivalent damage
+      final List<int> damageArray = config.attackDamage as List<int>;
+      return damageArray.fold(0, (sum, damage) => sum + damage);
+    } else {
+      return config.attackDamage as int;
+    }
+  }
 
   /// Check if unit can move to target position
   bool canMoveTo(HexCoordinate target, List<GameUnit> allUnits) {

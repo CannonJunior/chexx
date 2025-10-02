@@ -5,6 +5,9 @@ import '../models/game_state.dart';
 import '../models/game_unit.dart';
 import '../models/meta_ability.dart';
 import '../models/hex_orientation.dart';
+import '../components/combat_result_display.dart';
+import '../systems/combat/wwii_combat_system.dart';
+import '../../core/interfaces/unit_factory.dart';
 
 /// Main game screen using custom game engine
 class ChexxGameScreen extends StatefulWidget {
@@ -33,6 +36,9 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
 
     // Listen to game state changes
     gameEngine.addListener(_onGameStateChanged);
+
+    // Set up combat result callback
+    gameEngine.gameState.onCombatResult = _showCombatResult;
   }
 
   @override
@@ -110,6 +116,10 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
     gameEngine.handleHover(position, size);
+  }
+
+  void _showCombatResult(CombatResult combatResult) {
+    CombatResultOverlay.show(context, combatResult);
   }
 
   Widget _buildGameUI() {
@@ -549,7 +559,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              '${_getUnitTypeName(selectedUnit.type)} (Lv.${selectedUnit.level})',
+              '${_getUnitTypeName(_stringToUnitType(selectedUnit.unitTypeId))} (Lv.${selectedUnit.level})',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
@@ -583,7 +593,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
           const SizedBox(height: 8),
 
           Text(
-            _getMovementDescription(selectedUnit.type),
+            _getMovementDescription(_stringToUnitType(selectedUnit.unitTypeId)),
             style: TextStyle(
               color: Colors.white60,
               fontSize: 10,
@@ -646,6 +656,22 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
     );
   }
 
+  /// Convert unitTypeId to UnitType enum for compatibility
+  UnitType _stringToUnitType(String unitTypeId) {
+    switch (unitTypeId) {
+      case 'minor':
+        return UnitType.minor;
+      case 'scout':
+        return UnitType.scout;
+      case 'knight':
+        return UnitType.knight;
+      case 'guardian':
+        return UnitType.guardian;
+      default:
+        throw ArgumentError('Unknown unit type: $unitTypeId');
+    }
+  }
+
   String _getUnitTypeName(UnitType type) {
     switch (type) {
       case UnitType.minor:
@@ -693,7 +719,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen>
   List<Widget> _getUnitAbilities(GameUnit unit) {
     final abilities = <Widget>[];
 
-    switch (unit.type) {
+    switch (_stringToUnitType(unit.unitTypeId)) {
       case UnitType.minor:
         abilities.add(_buildAbilityDescription('No special abilities', 'Basic combat unit'));
         break;

@@ -1,0 +1,328 @@
+{
+  "name": "WWII Action Cards Deck",
+  "description": "Standard deck of 40 action cards for WWII game mode",
+  "version": "1.0.0",
+  "total_cards": 40,
+  "cards": [
+    {
+      "id": "rapid_assault_1",
+      "name": "Rapid Assault",
+      "description": "Quick strike with a single unit",
+      "units_can_order": 1,
+      "type": "attack",
+      "rarity": "common"
+    },
+    {
+      "id": "rapid_assault_2",
+      "name": "Rapid Assault",
+      "description": "Quick strike with a single unit",
+      "units_can_order": 1,
+      "type": "attack",
+      "rarity": "common"
+    },
+    {
+      "id": "rapid_assault_3",
+      "name": "Rapid Assault",
+      "description": "Quick strike with a single unit",
+      "units_can_order": 1,
+      "type": "attack",
+      "rarity": "common"
+    },
+    {
+      "id": "rapid_assault_4",
+      "name": "Rapid Assault",
+      "description": "Quick strike with a single unit",
+      "units_can_order": 1,
+      "type": "attack",
+      "rarity": "common"
+    },
+    {
+      "id": "rapid_assault_5",
+      "name": "Rapid Assault",
+      "description": "Quick strike with a single unit",
+      "units_can_order": 1,
+      "type": "attack",
+      "rarity": "common"
+    },
+    {
+      "id": "tactical_move_1",
+      "name": "Tactical Move",
+      "description": "Reposition a single unit",
+      "units_can_order": 1,
+      "type": "movement",
+      "rarity": "common"
+    },
+    {
+      "id": "tactical_move_2",
+      "name": "Tactical Move",
+      "description": "Reposition a single unit",
+      "units_can_order": 1,
+      "type": "movement",
+      "rarity": "common"
+    },
+    {
+      "id": "tactical_move_3",
+      "name": "Tactical Move",
+      "description": "Reposition a single unit",
+      "units_can_order": 1,
+      "type": "movement",
+      "rarity": "common"
+    },
+    {
+      "id": "tactical_move_4",
+      "name": "Tactical Move",
+      "description": "Reposition a single unit",
+      "units_can_order": 1,
+      "type": "movement",
+      "rarity": "common"
+    },
+    {
+      "id": "tactical_move_5",
+      "name": "Tactical Move",
+      "description": "Reposition a single unit",
+      "units_can_order": 1,
+      "type": "movement",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_1",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_2",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_3",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_4",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_5",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_6",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_7",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_8",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_9",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "coordinated_strike_10",
+      "name": "Coordinated Strike",
+      "description": "Command two units in a tactical maneuver",
+      "units_can_order": 2,
+      "type": "combined",
+      "rarity": "common"
+    },
+    {
+      "id": "flanking_maneuver_1",
+      "name": "Flanking Maneuver",
+      "description": "Coordinate two units for a flanking attack",
+      "units_can_order": 2,
+      "type": "attack",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "flanking_maneuver_2",
+      "name": "Flanking Maneuver",
+      "description": "Coordinate two units for a flanking attack",
+      "units_can_order": 2,
+      "type": "attack",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "flanking_maneuver_3",
+      "name": "Flanking Maneuver",
+      "description": "Coordinate two units for a flanking attack",
+      "units_can_order": 2,
+      "type": "attack",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "flanking_maneuver_4",
+      "name": "Flanking Maneuver",
+      "description": "Coordinate two units for a flanking attack",
+      "units_can_order": 2,
+      "type": "attack",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "flanking_maneuver_5",
+      "name": "Flanking Maneuver",
+      "description": "Coordinate two units for a flanking attack",
+      "units_can_order": 2,
+      "type": "attack",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "advance_in_force_1",
+      "name": "Advance in Force",
+      "description": "Move two units forward together",
+      "units_can_order": 2,
+      "type": "movement",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "advance_in_force_2",
+      "name": "Advance in Force",
+      "description": "Move two units forward together",
+      "units_can_order": 2,
+      "type": "movement",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "advance_in_force_3",
+      "name": "Advance in Force",
+      "description": "Move two units forward together",
+      "units_can_order": 2,
+      "type": "movement",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "advance_in_force_4",
+      "name": "Advance in Force",
+      "description": "Move two units forward together",
+      "units_can_order": 2,
+      "type": "movement",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "advance_in_force_5",
+      "name": "Advance in Force",
+      "description": "Move two units forward together",
+      "units_can_order": 2,
+      "type": "movement",
+      "rarity": "uncommon"
+    },
+    {
+      "id": "blitzkrieg_1",
+      "name": "Blitzkrieg",
+      "description": "Lightning warfare - command three units simultaneously",
+      "units_can_order": 3,
+      "type": "combined",
+      "rarity": "rare"
+    },
+    {
+      "id": "blitzkrieg_2",
+      "name": "Blitzkrieg",
+      "description": "Lightning warfare - command three units simultaneously",
+      "units_can_order": 3,
+      "type": "combined",
+      "rarity": "rare"
+    },
+    {
+      "id": "blitzkrieg_3",
+      "name": "Blitzkrieg",
+      "description": "Lightning warfare - command three units simultaneously",
+      "units_can_order": 3,
+      "type": "combined",
+      "rarity": "rare"
+    },
+    {
+      "id": "concentrated_assault_1",
+      "name": "Concentrated Assault",
+      "description": "Focus three units on a devastating attack",
+      "units_can_order": 3,
+      "type": "attack",
+      "rarity": "rare"
+    },
+    {
+      "id": "concentrated_assault_2",
+      "name": "Concentrated Assault",
+      "description": "Focus three units on a devastating attack",
+      "units_can_order": 3,
+      "type": "attack",
+      "rarity": "rare"
+    },
+    {
+      "id": "concentrated_assault_3",
+      "name": "Concentrated Assault",
+      "description": "Focus three units on a devastating attack",
+      "units_can_order": 3,
+      "type": "attack",
+      "rarity": "rare"
+    },
+    {
+      "id": "strategic_withdrawal_1",
+      "name": "Strategic Withdrawal",
+      "description": "Retreat three units to better positions",
+      "units_can_order": 3,
+      "type": "movement",
+      "rarity": "rare"
+    },
+    {
+      "id": "strategic_withdrawal_2",
+      "name": "Strategic Withdrawal",
+      "description": "Retreat three units to better positions",
+      "units_can_order": 3,
+      "type": "movement",
+      "rarity": "rare"
+    },
+    {
+      "id": "hold_position_1",
+      "name": "Hold Position",
+      "description": "Single unit holds defensive position",
+      "units_can_order": 1,
+      "type": "defensive",
+      "rarity": "common"
+    },
+    {
+      "id": "hold_position_2",
+      "name": "Hold Position",
+      "description": "Single unit holds defensive position",
+      "units_can_order": 1,
+      "type": "defensive",
+      "rarity": "common"
+    }
+  ]
+}

@@ -5,7 +5,9 @@ import 'game_board.dart';
 import 'meta_ability.dart';
 import 'unit_type_config.dart';
 import 'hex_orientation.dart';
+import 'action_card.dart';
 import '../../core/interfaces/unit_factory.dart';
+import '../systems/combat/wwii_combat_system.dart';
 
 enum GamePhase { setup, playing, gameOver }
 
@@ -54,6 +56,17 @@ class GameState extends ChangeNotifier {
   // Hexagon orientation setting
   HexOrientation hexOrientation;
 
+  // WWII Combat System
+  WWIICombatSystem? _combatSystem;
+  Function(CombatResult)? onCombatResult;
+
+  // Card system for WWII mode
+  ActionCardDeck? _actionCardDeck;
+  PlayerHand? _player1Hand;
+  PlayerHand? _player2Hand;
+  List<ActionCard> _discardPile;
+  int _unitsOrderedThisTurn;
+
   GameState()
       : board = GameBoard(),
         units = [],
@@ -71,12 +84,17 @@ class GameState extends ChangeNotifier {
         metaAbilityDefinitions = {},
         player1Rewards = 0,
         player2Rewards = 0,
-        hexOrientation = HexOrientation.flat;
+        hexOrientation = HexOrientation.flat,
+        _discardPile = [],
+        _unitsOrderedThisTurn = 0;
 
   /// Initialize game from scenario configuration
   void initializeFromScenario(Map<String, dynamic> scenarioConfig) {
     units.clear();
     metaHexes.clear();
+
+    // Initialize game type system based on scenario configuration
+    _initializeGameTypeFromScenario(scenarioConfig);
 
     // Initialize Meta system first to get ability definitions
     _initializeMetaSystem();
@@ -205,6 +223,12 @@ class GameState extends ChangeNotifier {
   /// Select a unit
   void selectUnit(GameUnit unit) {
     if (unit.owner != currentPlayer || !unit.canMove) return;
+
+    // In WWII mode, players must play a card before selecting units
+    if (_actionCardDeck != null && !canOrderUnit()) {
+      print('DEBUG: Cannot select unit - no card played in WWII mode');
+      return;
+    }
 
     selectedUnit = unit;
     unit.state = UnitState.selected;
@@ -343,19 +367,76 @@ class GameState extends ChangeNotifier {
     final targetUnit = board.getUnitAt(target, units);
     if (targetUnit == null || targetUnit.owner == currentPlayer) return false;
 
-    // Perform attack (check for shield effects and level bonuses)
-    final damage = selectedUnit!.effectiveAttackDamage;
-    final hasShield = isUnitShielded(targetUnit);
-    final unitKilled = targetUnit.takeDamageWithShield(damage, hasShield);
-
-    // Gain experience if unit was killed
-    if (unitKilled) {
-      selectedUnit!.gainExperience(1);
+    // Check if we should use WWII combat system for WWII units
+    if (_shouldUseWWIICombat(selectedUnit!, targetUnit)) {
+      _performWWIICombat(selectedUnit!, targetUnit, target);
+    } else {
+      // Use traditional combat for non-WWII units
+      _performTraditionalCombat(selectedUnit!, targetUnit);
     }
 
     // End turn after attacking
     endTurn();
     return true;
+  }
+
+  /// Check if WWII combat system should be used
+  bool _shouldUseWWIICombat(GameUnit attacker, GameUnit defender) {
+    // Use WWII combat if either unit is a WWII type
+    final wwiiTypes = ['infantry', 'armor', 'artillery'];
+    return wwiiTypes.contains(attacker.unitTypeId) ||
+           wwiiTypes.contains(defender.unitTypeId);
+  }
+
+  /// Perform WWII-style combat with dice rolling
+  Future<void> _performWWIICombat(GameUnit attacker, GameUnit defender, HexCoordinate target) async {
+    // Initialize combat system if needed
+    _combatSystem ??= await WWIICombatSystemFactory.create();
+
+    // Get unit configurations
+    final attackerConfig = attacker.config;
+    final defenderConfig = defender.config;
+
+    // Get tile type for defender position
+    final tile = board.getTile(target);
+    final tileType = tile?.type.toString().split('.').last ?? 'normal';
+
+    try {
+      // Execute combat
+      final combatResult = await _combatSystem!.executeAttack(
+        attacker,
+        defender,
+        attackerConfig,
+        defenderConfig,
+        tileType,
+      );
+
+      // Gain experience if unit was killed
+      if (combatResult.defenderDestroyed) {
+        attacker.gainExperience(1);
+      }
+
+      // Show combat result to UI if callback is set
+      if (onCombatResult != null) {
+        onCombatResult!(combatResult);
+      }
+    } catch (e) {
+      print('WWII Combat error: $e');
+      // Fallback to traditional combat
+      _performTraditionalCombat(attacker, defender);
+    }
+  }
+
+  /// Perform traditional combat (for non-WWII units)
+  void _performTraditionalCombat(GameUnit attacker, GameUnit defender) {
+    final damage = attacker.effectiveAttackDamage;
+    final hasShield = isUnitShielded(defender);
+    final unitKilled = defender.takeDamageWithShield(damage, hasShield);
+
+    // Gain experience if unit was killed
+    if (unitKilled) {
+      attacker.gainExperience(1);
+    }
   }
 
   /// Skip turn without attacking
@@ -515,6 +596,33 @@ class GameState extends ChangeNotifier {
     activeMetaEffects.clear();
   }
 
+  /// Initialize game type system from scenario configuration
+  void _initializeGameTypeFromScenario(Map<String, dynamic> scenarioConfig) {
+    // Check if game type is specified in scenario
+    final gameTypeId = scenarioConfig['game_type'] as String?;
+    print('DEBUG: Initializing game type from scenario: $gameTypeId');
+
+    if (gameTypeId == 'wwii') {
+      print('DEBUG: Initializing WWII game system');
+      // Initialize WWII-specific systems asynchronously
+      _initializeWWIISystemAsync();
+    } else {
+      print('DEBUG: Using default CHEXX game system (game_type: ${gameTypeId ?? 'not specified'})');
+      // Default to CHEXX system - no additional initialization needed
+    }
+  }
+
+  /// Initialize WWII-specific systems asynchronously
+  void _initializeWWIISystemAsync() {
+    // Start async initialization - don't block the main initialization
+    initializeCardSystem().then((_) {
+      print('DEBUG: WWII card system initialized successfully');
+      notifyListeners(); // Notify UI that card system is ready
+    }).catchError((e) {
+      print('Error initializing WWII card system: $e');
+    });
+  }
+
   /// Select a Meta hex for ability use
   void selectMetaHex(MetaHex metaHex) {
     if (metaHex.controlledBy != currentPlayer && metaHex.controlledBy != null) {
@@ -658,6 +766,7 @@ class GameState extends ChangeNotifier {
     metaAbilityDefinitions.clear();
     player1Rewards = 0;
     player2Rewards = 0;
+    resetCardSystem(); // Reset card system
     board.clearHighlights();
     initializeGame();
   }
@@ -726,5 +835,159 @@ class GameState extends ChangeNotifier {
       owner: owner,
       position: position,
     );
+  }
+
+  // ========== CARD MANAGEMENT METHODS ==========
+
+  /// Initialize card system for WWII mode
+  Future<void> initializeCardSystem() async {
+    _actionCardDeck = await ActionCardDeckLoader.loadWWIIDeck();
+
+    // Deal initial hands to both players
+    final shuffledDeck = _actionCardDeck!.shuffle();
+    final cardsPerPlayer = 5; // From config
+
+    _player1Hand = PlayerHand(shuffledDeck.cards.take(cardsPerPlayer).toList());
+    _player2Hand = PlayerHand(shuffledDeck.cards.skip(cardsPerPlayer).take(cardsPerPlayer).toList());
+
+    _discardPile.clear();
+    _unitsOrderedThisTurn = 0;
+
+    notifyListeners();
+  }
+
+  /// Get current player's hand
+  PlayerHand? get currentPlayerHand {
+    return currentPlayer == Player.player1 ? _player1Hand : _player2Hand;
+  }
+
+  /// Get opponent's hand
+  PlayerHand? get opponentHand {
+    return currentPlayer == Player.player1 ? _player2Hand : _player1Hand;
+  }
+
+  /// Check if card system is initialized
+  bool get isCardSystemInitialized => _actionCardDeck != null && _player1Hand != null && _player2Hand != null;
+
+  /// Play a card from current player's hand
+  bool playCard(ActionCard card) {
+    final hand = currentPlayerHand;
+    if (hand == null || !hand.cards.contains(card)) {
+      return false;
+    }
+
+    if (hand.hasPlayedCard) {
+      return false; // Already played a card this turn
+    }
+
+    final success = hand.playCard(card);
+    if (success) {
+      _unitsOrderedThisTurn = 0; // Reset counter when new card is played
+      notifyListeners();
+    }
+    return success;
+  }
+
+  /// Get number of units that can still be ordered this turn
+  int get unitsCanOrderRemaining {
+    final hand = currentPlayerHand;
+    if (hand?.playedCard == null) return 0;
+    return hand!.unitsCanOrder - _unitsOrderedThisTurn;
+  }
+
+  /// Check if player can order a unit (based on played card)
+  bool canOrderUnit() {
+    return unitsCanOrderRemaining > 0;
+  }
+
+  /// Order a unit (decrements remaining orders)
+  bool orderUnit() {
+    if (!canOrderUnit()) return false;
+    _unitsOrderedThisTurn++;
+    notifyListeners();
+    return true;
+  }
+
+  /// End current player's turn (handle card cleanup and drawing)
+  void endPlayerTurn() {
+    final hand = currentPlayerHand;
+    if (hand != null) {
+      // Discard played card and draw new one
+      final playedCard = hand.endTurn();
+      if (playedCard != null) {
+        _discardPile.add(playedCard);
+
+        // Draw new card from deck (if available)
+        _drawCardForPlayer(currentPlayer);
+      }
+
+      _unitsOrderedThisTurn = 0;
+    }
+
+    // Switch players
+    currentPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
+
+    if (currentPlayer == Player.player1) {
+      turnNumber++;
+    }
+
+    notifyListeners();
+  }
+
+  /// Draw a new card for specified player
+  void _drawCardForPlayer(Player player) {
+    if (_actionCardDeck == null) return;
+
+    final availableCards = _actionCardDeck!.cards
+        .where((card) => !_discardPile.contains(card) &&
+                         !_player1Hand!.cards.contains(card) &&
+                         !_player2Hand!.cards.contains(card) &&
+                         _player1Hand?.playedCard != card &&
+                         _player2Hand?.playedCard != card)
+        .toList();
+
+    if (availableCards.isEmpty) {
+      // Reshuffle discard pile back into deck
+      _discardPile.clear();
+      availableCards.addAll(_actionCardDeck!.cards
+          .where((card) => !_player1Hand!.cards.contains(card) &&
+                           !_player2Hand!.cards.contains(card) &&
+                           _player1Hand?.playedCard != card &&
+                           _player2Hand?.playedCard != card));
+    }
+
+    if (availableCards.isNotEmpty) {
+      availableCards.shuffle();
+      final newCard = availableCards.first;
+
+      if (player == Player.player1) {
+        _player1Hand?.addCard(newCard);
+      } else {
+        _player2Hand?.addCard(newCard);
+      }
+    }
+  }
+
+  /// Reset card system (for game reset)
+  void resetCardSystem() {
+    _actionCardDeck = null;
+    _player1Hand = null;
+    _player2Hand = null;
+    _discardPile.clear();
+    _unitsOrderedThisTurn = 0;
+  }
+
+  /// Get card system debug info
+  Map<String, dynamic> getCardSystemInfo() {
+    return {
+      'deck_loaded': _actionCardDeck != null,
+      'deck_size': _actionCardDeck?.totalCards ?? 0,
+      'player1_hand_size': _player1Hand?.size ?? 0,
+      'player2_hand_size': _player2Hand?.size ?? 0,
+      'discard_pile_size': _discardPile.length,
+      'current_player_played_card': currentPlayerHand?.playedCard?.name,
+      'units_can_order_remaining': unitsCanOrderRemaining,
+      'units_ordered_this_turn': _unitsOrderedThisTurn,
+    };
   }
 }
