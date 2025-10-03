@@ -95,14 +95,6 @@ class ChexxGameState extends GameStateBase {
     gameMode = scenarioConfig['game_type'] as String?;
     print('DEBUG: Game mode: $gameMode');
 
-    // Check if this is card mode - if so, minimal setup
-    if (gameMode == 'card') {
-      print('DEBUG: Card mode - skipping most initialization');
-      gamePhase = GamePhase.playing;
-      // Card mode has no features, so don't load anything
-      return;
-    }
-
     gamePhase = GamePhase.playing;
 
     print('DEBUG: About to load board tiles from scenario');

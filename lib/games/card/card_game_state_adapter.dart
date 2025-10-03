@@ -70,7 +70,16 @@ class CardGameStateAdapter extends GameStateBase {
 
   @override
   void initializeFromScenario(Map<String, dynamic> scenarioConfig) {
-    // Not applicable for card games
+    // Extract initial hand size from scenario if provided
+    final initialHandSize = scenarioConfig['initial_hand_size'] as int? ?? 5;
+
+    // Start the card game with the configured hand size
+    startGame(initialHandSize: initialHandSize);
+
+    print('=== CARD GAME INITIALIZED FROM SCENARIO ===');
+    print('Scenario: ${scenarioConfig['scenario_name'] ?? 'Custom Scenario'}');
+    print('Initial hand size: $initialHandSize');
+    print('Game type: ${scenarioConfig['game_type']}');
   }
 
   @override

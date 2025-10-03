@@ -28,12 +28,15 @@ class _CardGameScreenState extends State<CardGameScreen> {
     print('=== CARD GAME SCREEN INIT ===');
     cardGameState = widget.gamePlugin.createGameState() as CardGameStateAdapter;
 
-    // Get initial hand size from scenario config or use default
-    final initialHandSize = widget.scenarioConfig?['initial_hand_size'] as int? ?? 5;
-    print('Initial hand size: $initialHandSize');
+    // Initialize from scenario if provided, otherwise use defaults
+    if (widget.scenarioConfig != null) {
+      print('Initializing card game from scenario');
+      cardGameState.initializeFromScenario(widget.scenarioConfig!);
+    } else {
+      print('No scenario config - starting with defaults');
+      cardGameState.startGame(initialHandSize: 5);
+    }
 
-    // Start the card game
-    cardGameState.startGame(initialHandSize: initialHandSize);
     print('Game started: ${cardGameState.gameStarted}');
     print('Players: ${cardGameState.players.length}');
     print('Current player: ${cardGameState.cardCurrentPlayer?.name}');
