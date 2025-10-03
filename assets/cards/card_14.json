@@ -1,0 +1,12 @@
+{
+  "id": "card_14",
+  "name": "Card 14",
+  "description": "This is card number 14. Type: defense. A powerful card for your deck.",
+  "cost": 3,
+  "type": "defense",
+  "attributes": {
+    "power": 5,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

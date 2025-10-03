@@ -1,0 +1,12 @@
+{
+  "id": "card_5",
+  "name": "Card 5",
+  "description": "This is card number 5. Type: attack. A powerful card for your deck.",
+  "cost": 4,
+  "type": "attack",
+  "attributes": {
+    "power": 1,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

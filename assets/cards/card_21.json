@@ -1,0 +1,12 @@
+{
+  "id": "card_21",
+  "name": "Card 21",
+  "description": "This is card number 21. Type: attack. A powerful card for your deck.",
+  "cost": 0,
+  "type": "attack",
+  "attributes": {
+    "power": 2,
+    "rarity": "rare"
+  },
+  "imageAsset": ""
+}

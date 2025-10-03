@@ -1,0 +1,12 @@
+{
+  "id": "card_6",
+  "name": "Card 6",
+  "description": "This is card number 6. Type: defense. A powerful card for your deck.",
+  "cost": 5,
+  "type": "defense",
+  "attributes": {
+    "power": 2,
+    "rarity": "rare"
+  },
+  "imageAsset": ""
+}

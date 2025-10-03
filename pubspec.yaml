@@ -14,6 +14,8 @@ dependencies:
   flame_forge2d: ^0.16.0
   oxygen: ^0.3.1
   cupertino_icons: ^1.0.8
+  f_card_engine:
+    path: ../f-card
 
 dev_dependencies:
   flutter_test:
@@ -25,6 +27,7 @@ flutter:
   assets:
     - assets/images/
     - assets/config/
+    - assets/cards/
     - lib/configs/unit_types/
     - lib/configs/game_types/
     - lib/configs/combat_systems/

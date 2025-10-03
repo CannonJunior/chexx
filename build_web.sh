@@ -33,23 +33,14 @@ flutter clean
 print_status "Getting dependencies..."
 flutter pub get
 
-# Try building with CanvasKit first (better performance)
-print_status "Building with CanvasKit renderer..."
-if flutter build web --web-renderer canvaskit --release; then
-    print_success "✅ Web build completed with CanvasKit renderer!"
-    RENDERER="CanvasKit"
+# Build web version (Flutter auto-selects best renderer)
+print_status "Building web version..."
+if flutter build web --release; then
+    print_success "✅ Web build completed successfully!"
+    RENDERER="Auto (Flutter default)"
 else
-    print_error "❌ CanvasKit build failed, trying HTML renderer..."
-
-    # Fallback to HTML renderer
-    print_status "Building with HTML renderer..."
-    if flutter build web --web-renderer html --release; then
-        print_success "✅ Web build completed with HTML renderer!"
-        RENDERER="HTML"
-    else
-        print_error "❌ Both renderers failed. Check errors above."
-        exit 1
-    fi
+    print_error "❌ Web build failed. Check errors above."
+    exit 1
 fi
 
 # Display build info

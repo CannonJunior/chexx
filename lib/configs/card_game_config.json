@@ -1,0 +1,30 @@
+{
+  "game_name": "Card Game Mode",
+  "description": "Turn-based strategy using f-card engine for card management",
+  "initial_hand_size": 5,
+  "max_hand_size": 10,
+  "cards_drawn_per_turn": 1,
+  "require_card_play_per_turn": true,
+  "draw_at_turn_end": true,
+  "number_of_players": 2,
+  "card_types": {
+    "order": {
+      "description": "Order units to move or attack",
+      "categories": ["movement", "attack", "special"]
+    },
+    "spell": {
+      "description": "Cast spells with various effects",
+      "categories": ["damage", "heal", "buff", "debuff"]
+    },
+    "summon": {
+      "description": "Summon units to the battlefield",
+      "categories": ["minor", "major", "elite"]
+    }
+  },
+  "ui_config": {
+    "show_hand_at_bottom": true,
+    "card_width": 120,
+    "card_height": 160,
+    "enable_card_preview": true
+  }
+}

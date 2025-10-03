@@ -1,0 +1,12 @@
+{
+  "id": "card_29",
+  "name": "Card 29",
+  "description": "This is card number 29. Type: attack. A powerful card for your deck.",
+  "cost": 8,
+  "type": "attack",
+  "attributes": {
+    "power": 5,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

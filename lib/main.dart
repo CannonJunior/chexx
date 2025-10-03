@@ -4,6 +4,7 @@ import 'dart:html' as html;
 import 'dart:convert';
 import 'core/engine/game_plugin_manager.dart';
 import 'games/chexx/chexx_plugin.dart';
+import 'games/card/card_plugin.dart';
 import 'src/screens/scenario_builder_screen.dart';
 
 void main() async {
@@ -11,9 +12,16 @@ void main() async {
 
   // Initialize plugin system
   final pluginManager = GamePluginManager();
+
+  // Register CHEXX plugin
   final chexxPlugin = ChexxPlugin();
   await chexxPlugin.initialize();
   pluginManager.registerPlugin(chexxPlugin);
+
+  // Register Card plugin
+  final cardPlugin = CardPlugin();
+  await cardPlugin.initialize();
+  pluginManager.registerPlugin(cardPlugin);
 
   runApp(const TileGameFrameworkApp());
 }
@@ -44,6 +52,8 @@ class MainMenuScreen extends StatefulWidget {
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
+  String selectedGameMode = 'chexx'; // Default game mode
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,7 +106,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
               const Spacer(),
 
-              // Game info
+              // Game mode selection
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 32),
                 padding: const EdgeInsets.all(24),
@@ -108,21 +118,40 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 child: Column(
                   children: [
                     const Text(
-                      'Game Features:',
+                      'Select Game Mode:',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Chexx mode
+                    _buildGameModeOption(
+                      'chexx',
+                      'CHEXX',
+                      'Classic hexagonal strategy game',
+                      Colors.blue,
+                    ),
                     const SizedBox(height: 12),
 
-                    _buildFeatureItem('✅ 61 hexagonal battlefield'),
-                    _buildFeatureItem('✅ 3 unique major unit types'),
-                    _buildFeatureItem('✅ 6-second turn timer'),
-                    _buildFeatureItem('✅ Meta hexagon special abilities'),
-                    _buildFeatureItem('✅ Strategic positioning gameplay'),
-                    _buildFeatureItem('✅ Custom Flutter game engine'),
+                    // WWII mode
+                    _buildGameModeOption(
+                      'wwii',
+                      'WWII',
+                      'World War II tactical combat (experimental)',
+                      Colors.green,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Card mode
+                    _buildGameModeOption(
+                      'card',
+                      'Card Game',
+                      'F-Card engine powered card gameplay',
+                      Colors.purple,
+                    ),
                   ],
                 ),
               ),
@@ -246,27 +275,75 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 
-  Widget _buildFeatureItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.hexagon,
-            color: Colors.blue.shade400,
-            size: 16,
+  Widget _buildGameModeOption(String modeId, String title, String description, Color color) {
+    final isSelected = selectedGameMode == modeId;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          selectedGameMode = modeId;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.3) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? color : Colors.white24,
+            width: isSelected ? 2 : 1,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
+        ),
+        child: Row(
+          children: [
+            // Selection indicator
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? color : Colors.white38,
+                  width: 2,
+                ),
+                color: isSelected ? color : Colors.transparent,
+              ),
+              child: isSelected
+                  ? const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 14,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+
+            // Mode info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white70 : Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -278,12 +355,25 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       DeviceOrientation.landscapeRight,
     ]);
 
-    // Use plugin system to start CHEXX game
-    final pluginManager = GamePluginManager();
-    pluginManager.setActivePlugin('chexx').then((_) {
-      final gameScreen = pluginManager.createGameScreen();
+    // Create scenario config with selected game mode
+    final scenarioConfig = {
+      'game_type': selectedGameMode,
+      'scenario_name': 'Quick Start ${selectedGameMode.toUpperCase()}',
+      'unit_placements': [],
+      'meta_hex_positions': [],
+      'board': {'size': 5},
+      'initial_hand_size': 5, // Configurable starting hand size for card game
+    };
 
-      if (gameScreen != null) {
+    // Use plugin system to start game with selected mode
+    final pluginManager = GamePluginManager();
+    final pluginId = selectedGameMode == 'card' ? 'card' : 'chexx';
+
+    pluginManager.setActivePlugin(pluginId).then((_) {
+      final plugin = pluginManager.getPlugin(pluginId);
+      if (plugin != null) {
+        final gameScreen = plugin.createGameScreen(scenarioConfig: scenarioConfig);
+
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => gameScreen,

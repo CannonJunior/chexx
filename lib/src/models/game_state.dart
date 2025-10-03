@@ -96,6 +96,16 @@ class GameState extends ChangeNotifier {
     // Initialize game type system based on scenario configuration
     _initializeGameTypeFromScenario(scenarioConfig);
 
+    // Check game mode - if card mode, skip most initialization
+    final gameTypeId = scenarioConfig['game_type'] as String?;
+    if (gameTypeId == 'card') {
+      // Card mode: minimal setup, no units, no meta hexes
+      gamePhase = GamePhase.playing;
+      print('DEBUG: Card mode initialized with no features');
+      notifyListeners();
+      return;
+    }
+
     // Initialize Meta system first to get ability definitions
     _initializeMetaSystem();
 
@@ -199,6 +209,10 @@ class GameState extends ChangeNotifier {
         position: p2Positions[6 + i], // Offset by minor units
       ));
     }
+
+    // Initialize WWII card system by default (since we changed default mode to WWII)
+    print('DEBUG: Initializing WWII game system (default mode)');
+    _initializeWWIISystemAsync();
 
     // Initialize Meta abilities
     _initializeMetaSystem();
@@ -602,13 +616,19 @@ class GameState extends ChangeNotifier {
     final gameTypeId = scenarioConfig['game_type'] as String?;
     print('DEBUG: Initializing game type from scenario: $gameTypeId');
 
-    if (gameTypeId == 'wwii') {
+    if (gameTypeId == 'chexx') {
+      print('DEBUG: Using CHEXX game system (explicitly specified)');
+      // Use CHEXX system - no additional initialization needed
+    } else if (gameTypeId == 'wwii') {
       print('DEBUG: Initializing WWII game system');
-      // Initialize WWII-specific systems asynchronously
+      // Initialize WWII system with card-based gameplay
       _initializeWWIISystemAsync();
+    } else if (gameTypeId == 'card') {
+      print('DEBUG: Card mode selected - minimal features available');
+      // Card mode is not yet implemented - no special initialization
     } else {
-      print('DEBUG: Using default CHEXX game system (game_type: ${gameTypeId ?? 'not specified'})');
-      // Default to CHEXX system - no additional initialization needed
+      print('DEBUG: Unknown game type, defaulting to CHEXX');
+      // Default to CHEXX if unknown
     }
   }
 

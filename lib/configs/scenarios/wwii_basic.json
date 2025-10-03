@@ -1,0 +1,50 @@
+{
+  "name": "WWII Basic Scenario",
+  "description": "Basic WWII scenario with action cards and combat system",
+  "game_type": "wwii",
+  "board": {
+    "width": 13,
+    "height": 9,
+    "layout": "standard"
+  },
+  "player1_units": [
+    {
+      "type": "infantry",
+      "position": [2, 2],
+      "hp": 4
+    },
+    {
+      "type": "armor",
+      "position": [1, 2],
+      "hp": 3
+    },
+    {
+      "type": "artillery",
+      "position": [0, 2],
+      "hp": 2
+    }
+  ],
+  "player2_units": [
+    {
+      "type": "infantry",
+      "position": [10, 6],
+      "hp": 4
+    },
+    {
+      "type": "armor",
+      "position": [11, 6],
+      "hp": 3
+    },
+    {
+      "type": "artillery",
+      "position": [12, 6],
+      "hp": 2
+    }
+  ],
+  "meta_hex_positions": [],
+  "turn_system": {
+    "type": "card_based",
+    "cards_per_player": 5,
+    "time_limit": 45
+  }
+}

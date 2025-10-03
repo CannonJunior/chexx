@@ -1,0 +1,12 @@
+{
+  "id": "card_31",
+  "name": "Card 31",
+  "description": "This is card number 31. Type: support. A powerful card for your deck.",
+  "cost": 0,
+  "type": "support",
+  "attributes": {
+    "power": 2,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

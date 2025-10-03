@@ -59,6 +59,14 @@ class ChexxGameEngine extends GameEngineBase {
   }
 
   void handleTap(Offset position, Size canvasSize) {
+    final chexxGameState = gameState as ChexxGameState;
+
+    // Card mode has no actions - ignore taps
+    if (chexxGameState.gameMode == 'card') {
+      print('DEBUG: Card mode - tap actions disabled');
+      return;
+    }
+
     // Convert screen position to hex coordinate using current orientation
     final hexCoord = _screenToHex(position, canvasSize);
     print('DEBUG: HANDLE TAP - Screen position: $position, Canvas size: $canvasSize');

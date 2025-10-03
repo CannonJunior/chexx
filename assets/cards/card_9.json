@@ -1,0 +1,12 @@
+{
+  "id": "card_9",
+  "name": "Card 9",
+  "description": "This is card number 9. Type: attack. A powerful card for your deck.",
+  "cost": 8,
+  "type": "attack",
+  "attributes": {
+    "power": 5,
+    "rarity": "rare"
+  },
+  "imageAsset": ""
+}

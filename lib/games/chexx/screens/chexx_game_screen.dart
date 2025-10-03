@@ -12,6 +12,7 @@ import '../../../src/utils/tile_colors.dart';
 import '../../../src/models/game_board.dart';
 import '../../../src/models/hex_coordinate.dart' as src_hex;
 import '../../../src/models/game_state.dart';
+import '../../../src/models/action_card.dart';
 
 /// CHEXX game screen implementation
 class ChexxGameScreen extends StatefulWidget {
@@ -205,6 +206,14 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           child: _buildBottomUI(gameState),
         ),
 
+        // Left side card hand panel for WWII mode
+        if (_shouldShowCardHand(gameState))
+          Positioned(
+            top: 80,
+            left: 16,
+            child: _buildCardHandPanel(gameState),
+          ),
+
         // Right side unit info panel
         if (_getSelectedUnit(gameState) != null)
           Positioned(
@@ -335,30 +344,52 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
   }
 
   Widget _buildBottomUI(ChexxGameState gameState) {
+    // Card mode has no actions
+    final isCardMode = gameState.gameMode == 'card';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        // End turn button
-        ElevatedButton(
-          onPressed: () => gameEngine.endTurn(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.grey.shade600,
-            foregroundColor: Colors.white,
+        if (isCardMode) ...[
+          // Card mode message
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.purple.shade800.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Card Mode - Coming Soon',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
-          child: const Text('End Turn'),
-        ),
-
-        // Reset game button
-        ElevatedButton(
-          onPressed: () => gameEngine.resetGame(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red.shade600,
-            foregroundColor: Colors.white,
+        ] else ...[
+          // End turn button
+          ElevatedButton(
+            onPressed: () => gameEngine.endTurn(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('End Turn'),
           ),
-          child: const Text('Reset'),
-        ),
 
-        // Back button
+          // Reset game button
+          ElevatedButton(
+            onPressed: () => gameEngine.resetGame(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
+
+        // Back button (always available)
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(),
           style: ElevatedButton.styleFrom(
@@ -759,26 +790,26 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
   List<Widget> _getUnitTypeRows() {
     final gameState = gameEngine.gameState;
 
-    // Check if we're in WWII mode by checking if card system is initialized
-    // Cast to specific GameState type to access the card system properties
-    if (gameState is GameState) {
-      final specificGameState = gameState as GameState;
-      if (specificGameState.isCardSystemInitialized) {
-        // WWII mode - show WWII unit types
-        return [
-          _buildUnitTypeRow('Infantry', 'Standard infantry unit', '1-4 HP, 2 Move, 1 Range'),
-          _buildUnitTypeRow('Armor', 'Heavy armored unit', '1-3 HP, 3 Move, 2 Range'),
-          _buildUnitTypeRow('Artillery', 'Long-range unit', '1-2 HP, 1 Move, 4 Range'),
-        ];
-      }
+    // Check if we're explicitly in CHEXX mode by checking scenario config
+    final scenarioConfig = widget.scenarioConfig;
+    final gameTypeId = scenarioConfig?['game_type'] as String?;
+
+    // Only show CHEXX units if explicitly set to 'chexx' mode
+    if (gameTypeId == 'chexx') {
+      // CHEXX mode - show CHEXX unit types
+      return [
+        _buildUnitTypeRow('Minor', 'Basic unit', '1 HP, 1 Move, 1 Attack'),
+        _buildUnitTypeRow('Scout', 'Fast reconnaissance', '2 HP, 3 Move, 1 Attack, Range 3'),
+        _buildUnitTypeRow('Knight', 'Heavy assault', '3 HP, 2 Move, 2 Attack'),
+        _buildUnitTypeRow('Guardian', 'Defensive tank', '3 HP, 1 Move, 1 Attack'),
+      ];
     }
 
-    // CHEXX mode - show default CHEXX unit types
+    // Default to WWII mode (since we changed the default game mode)
     return [
-      _buildUnitTypeRow('Minor', 'Basic unit', '1 HP, 1 Move, 1 Attack'),
-      _buildUnitTypeRow('Scout', 'Fast reconnaissance', '2 HP, 3 Move, 1 Attack, Range 3'),
-      _buildUnitTypeRow('Knight', 'Heavy assault', '3 HP, 2 Move, 2 Attack'),
-      _buildUnitTypeRow('Guardian', 'Defensive tank', '3 HP, 1 Move, 1 Attack'),
+      _buildUnitTypeRow('Infantry', 'Standard infantry unit', '1-4 HP, 2 Move, 1 Range'),
+      _buildUnitTypeRow('Armor', 'Heavy armored unit', '1-3 HP, 3 Move, 2 Range'),
+      _buildUnitTypeRow('Artillery', 'Long-range unit', '1-2 HP, 1 Move, 4 Range'),
     ];
   }
 
@@ -1097,6 +1128,319 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
         return [
           'No special effects'
         ];
+    }
+  }
+
+  /// Check if card hand should be shown for WWII mode
+  bool _shouldShowCardHand(dynamic gameState) {
+    if (gameState is GameState) {
+      final specificGameState = gameState as GameState;
+      return specificGameState.isCardSystemInitialized &&
+             specificGameState.currentPlayerHand != null;
+    }
+    return false;
+  }
+
+  /// Build the card hand panel for WWII mode
+  Widget _buildCardHandPanel(dynamic gameState) {
+    if (gameState is! GameState) return const SizedBox.shrink();
+
+    final specificGameState = gameState as GameState;
+    final hand = specificGameState.currentPlayerHand;
+
+    if (hand == null) return const SizedBox.shrink();
+
+    return Container(
+      width: 280,
+      constraints: const BoxConstraints(maxHeight: 400),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.brown.shade900.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.amber.shade600,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(2, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(
+                Icons.style,
+                color: Colors.amber.shade600,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Action Cards',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${hand.size} cards',
+                style: TextStyle(
+                  color: Colors.amber.shade300,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Current played card (if any)
+          if (hand.hasPlayedCard) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade800.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade600),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Played Card:',
+                    style: TextStyle(
+                      color: Colors.green.shade300,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  _buildCardWidget(hand.playedCard!, isPlayed: true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Cards in hand
+          Text(
+            'Hand:',
+            style: TextStyle(
+              color: Colors.amber.shade300,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          if (hand.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'No cards in hand',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: hand.cards.length,
+                itemBuilder: (context, index) {
+                  final card = hand.cards[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _buildCardWidget(card, isPlayable: !hand.hasPlayedCard),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Build a single action card widget
+  Widget _buildCardWidget(ActionCard card, {bool isPlayable = false, bool isPlayed = false}) {
+    final color = _getCardColor(card.type);
+    final rarityColor = _getRarityColor(card.rarity);
+
+    return GestureDetector(
+      onTap: isPlayable ? () => _playCard(card) : null,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isPlayed
+              ? Colors.green.shade800.withOpacity(0.2)
+              : color.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isPlayed ? Colors.green.shade600 : rarityColor,
+            width: isPlayable ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Card name and units
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    card.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: rarityColor.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: rarityColor, width: 1),
+                  ),
+                  child: Text(
+                    '${card.unitsCanOrder}',
+                    style: TextStyle(
+                      color: rarityColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+
+            // Card description
+            Text(
+              card.description,
+              style: TextStyle(
+                color: Colors.grey.shade300,
+                fontSize: 10,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+
+            // Card type and rarity
+            if (!isPlayed) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Text(
+                    card.type.name.toUpperCase(),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    card.rarity.name.toUpperCase(),
+                    style: TextStyle(
+                      color: rarityColor,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // Play indicator
+            if (isPlayable && !isPlayed)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: const Text(
+                  'TAP TO PLAY',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Get color for card type
+  Color _getCardColor(ActionCardType type) {
+    switch (type) {
+      case ActionCardType.attack:
+        return Colors.red.shade600;
+      case ActionCardType.movement:
+        return Colors.blue.shade600;
+      case ActionCardType.combined:
+        return Colors.purple.shade600;
+      case ActionCardType.defensive:
+        return Colors.green.shade600;
+    }
+  }
+
+  /// Get color for card rarity
+  Color _getRarityColor(ActionCardRarity rarity) {
+    switch (rarity) {
+      case ActionCardRarity.common:
+        return Colors.grey.shade400;
+      case ActionCardRarity.uncommon:
+        return Colors.green.shade400;
+      case ActionCardRarity.rare:
+        return Colors.blue.shade400;
+      case ActionCardRarity.epic:
+        return Colors.purple.shade400;
+    }
+  }
+
+  /// Play a card from hand
+  void _playCard(ActionCard card) {
+    final gameState = gameEngine.gameState;
+    if (gameState is GameState) {
+      final specificGameState = gameState as GameState;
+      final hand = specificGameState.currentPlayerHand;
+
+      if (hand != null && hand.playCard(card)) {
+        print('DEBUG: Played card: ${card.name} (${card.unitsCanOrder} units)');
+        setState(() {
+          // UI will update via gameState listener
+        });
+      } else {
+        print('DEBUG: Failed to play card: ${card.name}');
+      }
     }
   }
 }

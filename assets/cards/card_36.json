@@ -1,0 +1,12 @@
+{
+  "id": "card_36",
+  "name": "Card 36",
+  "description": "This is card number 36. Type: special. A powerful card for your deck.",
+  "cost": 5,
+  "type": "special",
+  "attributes": {
+    "power": 2,
+    "rarity": "rare"
+  },
+  "imageAsset": ""
+}

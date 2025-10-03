@@ -1,0 +1,12 @@
+{
+  "id": "card_38",
+  "name": "Card 38",
+  "description": "This is card number 38. Type: defense. A powerful card for your deck.",
+  "cost": 7,
+  "type": "defense",
+  "attributes": {
+    "power": 4,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

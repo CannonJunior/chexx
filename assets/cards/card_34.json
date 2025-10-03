@@ -1,0 +1,12 @@
+{
+  "id": "card_34",
+  "name": "Card 34",
+  "description": "This is card number 34. Type: defense. A powerful card for your deck.",
+  "cost": 3,
+  "type": "defense",
+  "attributes": {
+    "power": 5,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

@@ -1,0 +1,12 @@
+{
+  "id": "card_18",
+  "name": "Card 18",
+  "description": "This is card number 18. Type: defense. A powerful card for your deck.",
+  "cost": 7,
+  "type": "defense",
+  "attributes": {
+    "power": 4,
+    "rarity": "rare"
+  },
+  "imageAsset": ""
+}

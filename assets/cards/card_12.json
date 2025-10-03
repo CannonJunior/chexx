@@ -1,0 +1,12 @@
+{
+  "id": "card_12",
+  "name": "Card 12",
+  "description": "This is card number 12. Type: special. A powerful card for your deck.",
+  "cost": 1,
+  "type": "special",
+  "attributes": {
+    "power": 3,
+    "rarity": "rare"
+  },
+  "imageAsset": ""
+}

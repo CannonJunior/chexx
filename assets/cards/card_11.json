@@ -1,0 +1,12 @@
+{
+  "id": "card_11",
+  "name": "Card 11",
+  "description": "This is card number 11. Type: support. A powerful card for your deck.",
+  "cost": 0,
+  "type": "support",
+  "attributes": {
+    "power": 2,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

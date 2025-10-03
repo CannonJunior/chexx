@@ -1,0 +1,12 @@
+{
+  "id": "card_17",
+  "name": "Card 17",
+  "description": "This is card number 17. Type: attack. A powerful card for your deck.",
+  "cost": 6,
+  "type": "attack",
+  "attributes": {
+    "power": 3,
+    "rarity": "common"
+  },
+  "imageAsset": ""
+}

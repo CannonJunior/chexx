@@ -75,6 +75,9 @@ class ChexxGameState extends GameStateBase {
   String? lastCombatResult;
   DateTime? lastCombatTime;
 
+  // Game mode tracking
+  String? gameMode;
+
   @override
   void initializeGame() {
     gamePhase = GamePhase.playing;
@@ -87,6 +90,18 @@ class ChexxGameState extends GameStateBase {
     print('DEBUG: INITIALIZE FROM SCENARIO START');
     print('DEBUG: Scenario config keys: ${scenarioConfig.keys.toList()}');
     print('DEBUG: Scenario config size: ${scenarioConfig.length}');
+
+    // Extract and store game mode
+    gameMode = scenarioConfig['game_type'] as String?;
+    print('DEBUG: Game mode: $gameMode');
+
+    // Check if this is card mode - if so, minimal setup
+    if (gameMode == 'card') {
+      print('DEBUG: Card mode - skipping most initialization');
+      gamePhase = GamePhase.playing;
+      // Card mode has no features, so don't load anything
+      return;
+    }
 
     gamePhase = GamePhase.playing;
 
