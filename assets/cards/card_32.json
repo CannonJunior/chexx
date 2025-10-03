@@ -8,5 +8,12 @@
     "power": 3,
     "rarity": "common"
   },
-  "imageAsset": ""
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "name"
+    }
+  ]
 }

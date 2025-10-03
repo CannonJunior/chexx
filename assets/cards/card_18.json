@@ -8,5 +8,12 @@
     "power": 4,
     "rarity": "rare"
   },
-  "imageAsset": ""
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "name"
+    }
+  ]
 }

@@ -21,6 +21,7 @@ class CardGameScreen extends StatefulWidget {
 
 class _CardGameScreenState extends State<CardGameScreen> {
   late CardGameStateAdapter cardGameState;
+  dynamic selectedCard; // Track selected card for info panel
 
   @override
   void initState() {
@@ -59,18 +60,52 @@ class _CardGameScreenState extends State<CardGameScreen> {
           gamePlugin: ChexxPlugin(), // Use Chexx board
         ),
 
-        // Card UI overlay on top
+        // Card UI overlay on top - positioned to not obscure game controls
+        // Wrap in IgnorePointer with absorbing: false to allow clicks through empty areas
         SafeArea(
-          child: Column(
-            children: [
-              // Top bar with card-specific info
-              _buildCardInfoBar(),
+          child: IgnorePointer(
+            ignoring: true, // Ignore pointer events on the Stack itself
+            child: Stack(
+              children: [
+                // Top-right card info (deck counter and event log)
+                Positioned(
+                  top: 60, // Below the Chexx game's top UI bar
+                  right: 8,
+                  child: IgnorePointer(
+                    ignoring: false, // Allow interactions with this widget
+                    child: _buildCardInfoBar(),
+                  ),
+                ),
 
-              const Spacer(),
+                // Right side panels (Card Info and Unit Info)
+                if (selectedCard != null)
+                  Positioned(
+                    top: 120, // Below deck counter
+                    right: 8,
+                    child: IgnorePointer(
+                      ignoring: false, // Allow interactions with this widget
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _buildSelectedCardPanel(),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    ),
+                  ),
 
-              // Bottom bar with player hand
-              _buildCardHandBar(),
-            ],
+                // Bottom card hand bar
+                Positioned(
+                  bottom: 60, // Above the Chexx game's bottom button bar
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    ignoring: false, // Allow interactions with this widget
+                    child: _buildCardHandBar(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -78,52 +113,49 @@ class _CardGameScreenState extends State<CardGameScreen> {
   }
 
   Widget _buildCardInfoBar() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        border: Border(
-          bottom: BorderSide(color: Colors.purple.shade700, width: 2),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          // Deck counter
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.purple.shade800,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.purple.shade400),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.style, color: Colors.white, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  '${widget.gamePlugin.deckManager.cardsRemaining}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Deck counter
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.purple.shade800.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.purple.shade400),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.style, color: Colors.white, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                '${widget.gamePlugin.deckManager.cardsRemaining}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
 
-          const SizedBox(width: 8),
+        const SizedBox(width: 8),
 
-          // Event log button
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.white),
+        // Event log button
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.purple.shade800.withOpacity(0.9),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.history, color: Colors.white, size: 20),
             onPressed: _showEventLog,
             tooltip: 'Event Log',
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -131,59 +163,82 @@ class _CardGameScreenState extends State<CardGameScreen> {
     final currentPlayer = cardGameState.cardCurrentPlayer;
 
     return Container(
-      height: 180,
+      height: 140, // Reduced from 180
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.8),
+        color: Colors.black.withOpacity(0.7), // More transparent
         border: Border(
           top: BorderSide(color: Colors.purple.shade700, width: 2),
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          // Player info
+          // Player info (compact, vertical on left)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            width: 120,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   currentPlayer?.name ?? 'No player',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   '${currentPlayer?.hand.length ?? 0} cards',
                   style: const TextStyle(
                     color: Colors.white70,
-                    fontSize: 12,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // PLAY CARD button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: selectedCard != null ? () => _playCard(selectedCard) : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: const Text('PLAY CARD', style: TextStyle(fontSize: 11)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // END TURN button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _endTurn,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: const Text('END TURN', style: TextStyle(fontSize: 11)),
                   ),
                 ),
               ],
             ),
           ),
 
-          // Cards
-          Expanded(
-            child: _buildPlayerHand(),
+          // Vertical divider
+          Container(
+            width: 2,
+            color: Colors.purple.shade700,
           ),
 
-          // Actions
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: ElevatedButton.icon(
-              onPressed: _endTurn,
-              icon: const Icon(Icons.skip_next, size: 18),
-              label: const Text('END TURN'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                minimumSize: const Size(0, 36),
-              ),
-            ),
+          // Cards (horizontal scrolling)
+          Expanded(
+            child: _buildPlayerHand(),
           ),
         ],
       ),
@@ -215,8 +270,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
   Widget _buildCardWidget(dynamic card) {
     return Container(
-      width: 100,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
+      width: 85, // Reduced from 100
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.purple.shade900,
         borderRadius: BorderRadius.circular(8),
@@ -228,21 +283,21 @@ class _CardGameScreenState extends State<CardGameScreen> {
           onTap: () => _onCardTapped(card),
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(4),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   Icons.style,
                   color: Colors.purple.shade200,
-                  size: 32,
+                  size: 28, // Reduced from 32
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   card.card.name,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
+                    fontSize: 9, // Reduced from 10
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
@@ -254,7 +309,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
                   card.card.type,
                   style: TextStyle(
                     color: Colors.purple.shade200,
-                    fontSize: 8,
+                    fontSize: 7, // Reduced from 8
                   ),
                 ),
               ],
@@ -266,52 +321,123 @@ class _CardGameScreenState extends State<CardGameScreen> {
   }
 
   void _onCardTapped(dynamic card) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
-        title: Text(
-          card.card.name,
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Type: ${card.card.type}',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              card.card.description ?? 'No description',
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _playCard(card);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade700,
-            ),
-            child: const Text('Play Card'),
-          ),
-        ],
-      ),
-    );
+    setState(() {
+      selectedCard = card;
+    });
   }
 
   void _playCard(dynamic card) {
     cardGameState.playCard(card);
-    setState(() {});
+    setState(() {
+      selectedCard = null; // Clear selection after playing
+    });
+  }
+
+  Widget _buildSelectedCardPanel() {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.purple.shade900.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.purple.shade400, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'CARD INFO',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                onPressed: () => setState(() => selectedCard = null),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const Divider(color: Colors.purple),
+          const SizedBox(height: 8),
+
+          // Card name
+          Text(
+            selectedCard.card.name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Card type
+          Text(
+            'Type: ${selectedCard.card.type}',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Card description
+          Text(
+            selectedCard.card.description ?? 'No description',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+            ),
+          ),
+
+          // Actions section (if available)
+          if (selectedCard.card.actions != null && selectedCard.card.actions!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.purple),
+            const SizedBox(height: 8),
+            const Text(
+              'ACTIONS',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...(selectedCard.card.actions!.map((action) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.arrow_right, color: Colors.purple, size: 14),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '${action['action_type']}: ${action['hex_restrictions']} (${action['hex_tiles']})',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList()),
+          ],
+        ],
+      ),
+    );
   }
 
   void _endTurn() {

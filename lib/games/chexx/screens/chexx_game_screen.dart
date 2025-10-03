@@ -217,7 +217,8 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
         // Right side unit info panel
         if (_getSelectedUnit(gameState) != null)
           Positioned(
-            top: 80,
+            // In card mode, position lower to avoid overlapping card info
+            top: gameState.gameMode == 'card' ? 340 : 80,
             right: 16,
             child: Column(
               children: [
@@ -250,23 +251,40 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Current player indicator
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: gameState.currentPlayer.name == 'player1'
-                ? Colors.blue.shade600
-                : Colors.red.shade600,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            '${gameState.currentPlayer.name == 'player1' ? 'Player 1' : 'Player 2'} Turn',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+        // Current player indicator and Menu button column
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: gameState.currentPlayer.name == 'player1'
+                    ? Colors.blue.shade600
+                    : Colors.red.shade600,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${gameState.currentPlayer.name == 'player1' ? 'Player 1' : 'Player 2'} Turn',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            // Menu button under player indicator
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              ),
+              child: const Text('Menu'),
+            ),
+          ],
         ),
 
         // Orientation toggle button
@@ -344,30 +362,13 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
   }
 
   Widget _buildBottomUI(ChexxGameState gameState) {
-    // Card mode has no actions
+    // Card mode has no bottom actions (they're in the card UI overlay)
     final isCardMode = gameState.gameMode == 'card';
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        if (isCardMode) ...[
-          // Card mode message
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.purple.shade800.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text(
-              'Card Mode - Coming Soon',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ] else ...[
+        if (!isCardMode) ...[
           // End turn button
           ElevatedButton(
             onPressed: () => gameEngine.endTurn(),
@@ -388,16 +389,6 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
             child: const Text('Reset'),
           ),
         ],
-
-        // Back button (always available)
-        ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade600,
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Menu'),
-        ),
       ],
     );
   }
