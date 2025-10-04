@@ -18,8 +18,16 @@ import '../../../src/models/action_card.dart';
 class ChexxGameScreen extends StatefulWidget {
   final Map<String, dynamic>? scenarioConfig;
   final ChexxPlugin? gamePlugin;
+  final ChexxGameEngine? existingEngine;
+  final Function(ChexxGameEngine)? onEngineCreated;
 
-  const ChexxGameScreen({super.key, this.scenarioConfig, this.gamePlugin});
+  const ChexxGameScreen({
+    super.key,
+    this.scenarioConfig,
+    this.gamePlugin,
+    this.existingEngine,
+    this.onEngineCreated,
+  });
 
   @override
   State<ChexxGameScreen> createState() => _ChexxGameScreenState();
@@ -29,16 +37,30 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
   late ChexxGameEngine gameEngine;
   late FocusNode _focusNode;
   bool _showSettingsPanel = false;
+  bool _usingExistingEngine = false;
 
   @override
   void initState() {
     super.initState();
     _focusNode = FocusNode();
-    gameEngine = ChexxGameEngine(
-      gamePlugin: widget.gamePlugin ?? ChexxPlugin(),
-      scenarioConfig: widget.scenarioConfig,
-    );
+
+    if (widget.existingEngine != null) {
+      gameEngine = widget.existingEngine!;
+      _usingExistingEngine = true;
+    } else {
+      gameEngine = ChexxGameEngine(
+        gamePlugin: widget.gamePlugin ?? ChexxPlugin(),
+        scenarioConfig: widget.scenarioConfig,
+      );
+      _usingExistingEngine = false;
+    }
+
     gameEngine.addListener(_onGameStateChanged);
+
+    // Notify parent if callback provided
+    if (widget.onEngineCreated != null) {
+      widget.onEngineCreated!(gameEngine);
+    }
 
     // Request focus for keyboard input
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -49,7 +71,10 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
   @override
   void dispose() {
     gameEngine.removeListener(_onGameStateChanged);
-    gameEngine.dispose();
+    // Only dispose engine if we created it
+    if (!_usingExistingEngine) {
+      gameEngine.dispose();
+    }
     _focusNode.dispose();
     super.dispose();
   }

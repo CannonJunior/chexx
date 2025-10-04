@@ -123,6 +123,19 @@ class ChexxGameEngine extends GameEngineBase {
         }
 
         if (selectedUnit != null) {
+          // In card mode, require an active card action AND highlighted hex
+          if (chexxGameState.gameMode == 'card') {
+            if (!chexxGameState.isCardActionActive) {
+              print('Cannot attack - play a card action first');
+              return;
+            }
+            // In card mode, can only attack if unit's hex is highlighted
+            if (!chexxGameState.highlightedHexes.contains(selectedUnit.position)) {
+              print('Cannot attack - unit not in highlighted hex for current action');
+              return;
+            }
+          }
+
           final distance = selectedUnit.position.distanceTo(hexCoord);
           final attackRange = _getUnitAttackRange(selectedUnit.unitType);
 
@@ -163,6 +176,11 @@ class ChexxGameEngine extends GameEngineBase {
               }
               print('${unitAtPosition.unitType} health: $newHealth/${unitAtPosition.maxHealth}');
             }
+
+            // Notify card game if in card mode (action completed)
+            if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitOrdered != null) {
+              chexxGameState.onUnitOrdered!();
+            }
           } else {
             print('Target out of range (distance: $distance, range: $attackRange)');
           }
@@ -179,6 +197,19 @@ class ChexxGameEngine extends GameEngineBase {
       }
 
       if (selectedUnit != null) {
+        // In card mode, require an active card action AND highlighted hex
+        if (chexxGameState.gameMode == 'card') {
+          if (!chexxGameState.isCardActionActive) {
+            print('Cannot move - play a card action first');
+            return;
+          }
+          // In card mode, can only move if unit's hex is highlighted
+          if (!chexxGameState.highlightedHexes.contains(selectedUnit.position)) {
+            print('Cannot move - unit not in highlighted hex for current action');
+            return;
+          }
+        }
+
         // Movement validation based on unit type
         final distance = selectedUnit.position.distanceTo(hexCoord);
         final movementRange = _getUnitMovementRange(selectedUnit.unitType);
@@ -202,6 +233,11 @@ class ChexxGameEngine extends GameEngineBase {
             chexxGameState.simpleUnits[index] = updatedUnit;
           }
           print('Moved unit to: $hexCoord');
+
+          // Notify card game if in card mode (action completed)
+          if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitOrdered != null) {
+            chexxGameState.onUnitOrdered!();
+          }
         }
       }
     }
@@ -537,6 +573,20 @@ class ChexxGamePainter extends CustomPainter {
         // Highlight available attacks
         if (gameState.availableAttacks.contains(hex)) {
           canvas.drawPath(path, _attackPaint);
+        }
+
+        // Highlight hexes for card actions (use player's color for border)
+        if (gameState.highlightedHexes.contains(tile.coordinate)) {
+          // Get current player's color
+          final playerColor = gameState.currentPlayer == Player.player1
+              ? Colors.blue
+              : Colors.red;
+
+          final highlightBorder = Paint()
+            ..color = playerColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4;
+          canvas.drawPath(path, highlightBorder);
         }
       }
     }

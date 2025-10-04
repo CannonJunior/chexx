@@ -78,6 +78,15 @@ class ChexxGameState extends GameStateBase {
   // Game mode tracking
   String? gameMode;
 
+  // Card mode: track if a card action is currently active (allows unit ordering)
+  bool isCardActionActive = false;
+
+  // Card mode: hexes that should be highlighted for current action
+  Set<core_hex.HexCoordinate> highlightedHexes = {};
+
+  // Card mode: callback when unit is ordered (for completing card actions)
+  void Function()? onUnitOrdered;
+
   @override
   void initializeGame() {
     gamePhase = GamePhase.playing;
@@ -176,6 +185,11 @@ class ChexxGameState extends GameStateBase {
 
   @override
   void updateTimer(double deltaTime) {
+    // Card mode has no time limit - turns only end with END TURN button
+    if (gameMode == 'card') {
+      return;
+    }
+
     if (gamePhase == GamePhase.playing && !isPaused) {
       turnTimeRemaining -= deltaTime;
       if (turnTimeRemaining <= 0) {

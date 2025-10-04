@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:f_card_engine/f_card_engine.dart' as f_card;
 import '../chexx/screens/chexx_game_screen.dart';
+import '../chexx/screens/chexx_game_engine.dart';
+import '../chexx/models/chexx_game_state.dart';
 import '../chexx/chexx_plugin.dart';
+import '../../core/models/hex_coordinate.dart' as core_hex;
+import '../../core/interfaces/unit_factory.dart';
 import 'card_plugin.dart';
 import 'card_game_state_adapter.dart';
 
@@ -22,6 +27,12 @@ class CardGameScreen extends StatefulWidget {
 class _CardGameScreenState extends State<CardGameScreen> {
   late CardGameStateAdapter cardGameState;
   dynamic selectedCard; // Track selected card for info panel
+  ChexxGameEngine? _chexxGameEngine; // Reference to the Chexx game engine
+
+  // Card action state
+  dynamic playedCard; // Card currently being played (showing actions)
+  Set<int> completedActions = {}; // Track which actions are completed
+  int? activeActionIndex; // Which action is currently being used
 
   @override
   void initState() {
@@ -55,57 +66,46 @@ class _CardGameScreenState extends State<CardGameScreen> {
     return Stack(
       children: [
         // Chexx game board (same as other game modes)
-        ChexxGameScreen(
+        _CardModeChexxGameScreen(
           scenarioConfig: widget.scenarioConfig,
-          gamePlugin: ChexxPlugin(), // Use Chexx board
+          onEngineCreated: (engine) => _chexxGameEngine = engine,
         ),
 
-        // Card UI overlay on top - positioned to not obscure game controls
-        // Wrap in IgnorePointer with absorbing: false to allow clicks through empty areas
-        SafeArea(
-          child: IgnorePointer(
-            ignoring: true, // Ignore pointer events on the Stack itself
-            child: Stack(
-              children: [
-                // Top-right card info (deck counter and event log)
-                Positioned(
-                  top: 60, // Below the Chexx game's top UI bar
-                  right: 8,
-                  child: IgnorePointer(
-                    ignoring: false, // Allow interactions with this widget
-                    child: _buildCardInfoBar(),
-                  ),
-                ),
+        // Card UI overlay on top - use individual Positioned widgets to avoid blocking
+        // Top-right card info (deck counter and event log)
+        Positioned(
+          top: 60, // Below the Chexx game's top UI bar
+          right: 8,
+          child: SafeArea(
+            child: _buildCardInfoBar(),
+          ),
+        ),
 
-                // Right side panels (Card Info and Unit Info)
-                if (selectedCard != null)
-                  Positioned(
-                    top: 120, // Below deck counter
-                    right: 8,
-                    child: IgnorePointer(
-                      ignoring: false, // Allow interactions with this widget
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          _buildSelectedCardPanel(),
-                          const SizedBox(height: 8),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Bottom card hand bar
-                Positioned(
-                  bottom: 60, // Above the Chexx game's bottom button bar
-                  left: 0,
-                  right: 0,
-                  child: IgnorePointer(
-                    ignoring: false, // Allow interactions with this widget
-                    child: _buildCardHandBar(),
-                  ),
-                ),
-              ],
+        // Right side panels (Card Info or Played Card)
+        if (playedCard != null)
+          Positioned(
+            top: 120, // Below deck counter
+            right: 8,
+            child: SafeArea(
+              child: _buildPlayedCardPanel(),
             ),
+          )
+        else if (selectedCard != null)
+          Positioned(
+            top: 120, // Below deck counter
+            right: 8,
+            child: SafeArea(
+              child: _buildSelectedCardPanel(),
+            ),
+          ),
+
+        // Bottom card hand bar
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            child: _buildCardHandBar(),
           ),
         ),
       ],
@@ -327,9 +327,234 @@ class _CardGameScreenState extends State<CardGameScreen> {
   }
 
   void _playCard(dynamic card) {
-    cardGameState.playCard(card);
+    // Play card to f-card engine (moves to inPlay zone and sets hasPlayedCardThisTurn flag)
+    cardGameState.playCard(card, destination: f_card.CardZone.inPlay);
+
     setState(() {
-      selectedCard = null; // Clear selection after playing
+      playedCard = card;
+      completedActions.clear();
+      activeActionIndex = null;
+      selectedCard = null; // Clear selection
+    });
+  }
+
+  Widget _buildPlayedCardPanel() {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade900.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade400, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'CARD PLAYED',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                onPressed: () {
+                  // Cancel card - return it to hand
+                  setState(() => playedCard = null);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const Divider(color: Colors.green),
+          const SizedBox(height: 8),
+
+          // Card name
+          Text(
+            playedCard.card.name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Actions (clickable)
+          if (playedCard.card.actions != null && playedCard.card.actions!.isNotEmpty) ...[
+            const Text(
+              'ACTIONS - Click to use:',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...(playedCard.card.actions!.asMap().entries.map((entry) {
+              final index = entry.key;
+              final action = entry.value;
+              final isCompleted = completedActions.contains(index);
+              final isActive = activeActionIndex == index;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isCompleted ? null : () => _onActionTapped(index, action),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? Colors.yellow.shade900.withOpacity(0.5)
+                            : isCompleted
+                                ? Colors.grey.shade800.withOpacity(0.5)
+                                : Colors.green.shade800.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isActive
+                              ? Colors.yellow
+                              : isCompleted
+                                  ? Colors.grey
+                                  : Colors.green,
+                          width: isActive ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            isCompleted ? Icons.check_circle : Icons.arrow_right,
+                            color: isActive
+                                ? Colors.yellow
+                                : isCompleted
+                                    ? Colors.grey
+                                    : Colors.green,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${action['action_type']}: ${action['hex_restrictions']} (${action['hex_tiles']})',
+                              style: TextStyle(
+                                color: isCompleted ? Colors.grey : Colors.white70,
+                                fontSize: 9,
+                                decoration: isCompleted ? TextDecoration.lineThrough : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList()),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _onActionTapped(int actionIndex, dynamic action) {
+    setState(() {
+      activeActionIndex = actionIndex;
+
+      // Enable card action mode in Chexx engine
+      if (_chexxGameEngine != null) {
+        final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+        chexxState.isCardActionActive = true;
+
+        // Set callback for when unit is ordered
+        chexxState.onUnitOrdered = () {
+          _completeAction(activeActionIndex!);
+        };
+
+        // Get all hexes with player's units
+        final currentPlayer = chexxState.currentPlayer;
+        final playerUnitHexes = <core_hex.HexCoordinate>{};
+
+        for (final unit in chexxState.simpleUnits) {
+          if (unit.owner == currentPlayer) {
+            playerUnitHexes.add(unit.position);
+          }
+        }
+
+        // Apply hex_tiles filter
+        final hexTilesFilter = action['hex_tiles'] as String?;
+        final hexRestrictions = action['hex_restrictions'] as String?;
+
+        // Filter hexes based on action restrictions
+        // For now, implement basic filtering (can be expanded based on actual needs)
+        if (hexTilesFilter != null && hexTilesFilter != 'none') {
+          // Filter by unit type/name
+          playerUnitHexes.removeWhere((hex) {
+            final unit = chexxState.simpleUnits.firstWhere(
+              (u) => u.position == hex,
+              orElse: () => SimpleGameUnit(
+                id: '',
+                unitType: '',
+                owner: Player.player1,
+                position: hex,
+                health: 0,
+                maxHealth: 0,
+                remainingMovement: 0,
+              ),
+            );
+            // If hex_tiles is a specific unit type name, exclude those units
+            return unit.unitType.toLowerCase() == hexTilesFilter.toLowerCase();
+          });
+        }
+
+        // Set highlighted hexes in game state
+        chexxState.highlightedHexes = playerUnitHexes;
+        _chexxGameEngine!.notifyListeners();
+      }
+    });
+    print('Action ${actionIndex} selected: ${action}');
+  }
+
+  void _completeAction(int actionIndex) {
+    setState(() {
+      completedActions.add(actionIndex);
+      activeActionIndex = null;
+
+      // Clear card action state in Chexx engine
+      if (_chexxGameEngine != null) {
+        final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+        chexxState.isCardActionActive = false;
+        chexxState.highlightedHexes.clear();
+        chexxState.onUnitOrdered = null;
+        _chexxGameEngine!.notifyListeners();
+      }
+
+      // Check if all actions are complete
+      final totalActions = playedCard.card.actions?.length ?? 0;
+      if (completedActions.length >= totalActions) {
+        // All actions complete - move card from inPlay to discard
+        cardGameState.moveCardFromPlay(playedCard, f_card.CardZone.discard);
+        playedCard = null;
+        completedActions.clear();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Card completed and discarded'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
+          ),
+        );
+      }
     });
   }
 
@@ -441,17 +666,47 @@ class _CardGameScreenState extends State<CardGameScreen> {
   }
 
   void _endTurn() {
+    // If there's a played card with incomplete actions, show error
+    if (playedCard != null) {
+      final totalActions = playedCard.card.actions?.length ?? 0;
+      if (completedActions.length < totalActions) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Complete all card actions (${completedActions.length}/$totalActions done)'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
+          ),
+        );
+        return;
+      }
+    }
+
+    // End turn in f-card engine (checks if card was played)
     final success = cardGameState.cardGameState.endTurn();
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Must play a card before ending turn'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(top: 80, left: 20, right: 20),
         ),
       );
-    } else {
-      setState(() {});
+      return;
     }
+
+    // End turn in Chexx engine
+    if (_chexxGameEngine != null) {
+      _chexxGameEngine!.endTurn();
+    }
+
+    setState(() {
+      selectedCard = null; // Clear selected card for next turn
+      playedCard = null;
+      completedActions.clear();
+      activeActionIndex = null;
+    });
   }
 
   void _showEventLog() {
@@ -519,5 +774,49 @@ class _CardGameScreenState extends State<CardGameScreen> {
       default:
         return const Icon(Icons.circle, color: Colors.grey);
     }
+  }
+}
+
+/// Wrapper for ChexxGameScreen that exposes the game engine
+class _CardModeChexxGameScreen extends StatefulWidget {
+  final Map<String, dynamic>? scenarioConfig;
+  final Function(ChexxGameEngine) onEngineCreated;
+
+  const _CardModeChexxGameScreen({
+    this.scenarioConfig,
+    required this.onEngineCreated,
+  });
+
+  @override
+  State<_CardModeChexxGameScreen> createState() => _CardModeChexxGameScreenState();
+}
+
+class _CardModeChexxGameScreenState extends State<_CardModeChexxGameScreen> {
+  late ChexxGameEngine gameEngine;
+
+  @override
+  void initState() {
+    super.initState();
+    gameEngine = ChexxGameEngine(
+      gamePlugin: ChexxPlugin(),
+      scenarioConfig: widget.scenarioConfig,
+    );
+    widget.onEngineCreated(gameEngine); // Pass engine to parent
+  }
+
+  @override
+  void dispose() {
+    gameEngine.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Use ChexxGameScreen with the existing engine
+    return ChexxGameScreen(
+      scenarioConfig: widget.scenarioConfig,
+      gamePlugin: ChexxPlugin(),
+      existingEngine: gameEngine,
+    );
   }
 }
