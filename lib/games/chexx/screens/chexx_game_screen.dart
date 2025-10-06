@@ -198,6 +198,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
         health: unit.health,
         maxHealth: unit.maxHealth,
         remainingMovement: unit.remainingMovement - 1,
+        moveAfterCombat: unit.moveAfterCombat,
         isSelected: true,
       );
 

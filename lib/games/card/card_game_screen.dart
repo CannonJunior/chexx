@@ -33,6 +33,12 @@ class _CardGameScreenState extends State<CardGameScreen> {
   dynamic playedCard; // Card currently being played (showing actions)
   Set<int> completedActions = {}; // Track which actions are completed
   int? activeActionIndex; // Which action is currently being used
+  Map<String, Map<String, dynamic>> unitOriginalValues = {}; // Store original unit values before applying special attributes
+  bool allActionsComplete = false; // Track when all card actions are complete and turn is ready to end
+
+  // Sub-step tracking
+  Map<int, int> actionCurrentSubStep = {}; // Track current sub-step index for each action
+  Map<int, Set<int>> actionCompletedSubSteps = {}; // Track completed sub-steps for each action
 
   @override
   void initState() {
@@ -218,7 +224,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
                   child: ElevatedButton(
                     onPressed: _endTurn,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple.shade700,
+                      backgroundColor: allActionsComplete ? Colors.orange : Colors.purple.shade700,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       minimumSize: const Size(0, 32),
@@ -335,6 +341,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       completedActions.clear();
       activeActionIndex = null;
       selectedCard = null; // Clear selection
+      allActionsComplete = false; // Reset for new card
     });
   }
 
@@ -391,7 +398,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
           // Actions (clickable)
           if (playedCard.card.actions != null && playedCard.card.actions!.isNotEmpty) ...[
             const Text(
-              'ACTIONS - Click to use:',
+              'ACTIONS - Click to activate, click again to complete:',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -405,58 +412,114 @@ class _CardGameScreenState extends State<CardGameScreen> {
               final isCompleted = completedActions.contains(index);
               final isActive = activeActionIndex == index;
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: isCompleted ? null : () => _onActionTapped(index, action),
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? Colors.yellow.shade900.withOpacity(0.5)
-                            : isCompleted
-                                ? Colors.grey.shade800.withOpacity(0.5)
-                                : Colors.green.shade800.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: isActive
-                              ? Colors.yellow
-                              : isCompleted
-                                  ? Colors.grey
-                                  : Colors.green,
-                          width: isActive ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            isCompleted ? Icons.check_circle : Icons.arrow_right,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: isCompleted ? null : () => _onActionTapped(index, action),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
                             color: isActive
-                                ? Colors.yellow
+                                ? Colors.yellow.shade900.withOpacity(0.5)
                                 : isCompleted
-                                    ? Colors.grey
-                                    : Colors.green,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              '${action['action_type']}: ${action['hex_restrictions']} (${action['hex_tiles']})',
-                              style: TextStyle(
-                                color: isCompleted ? Colors.grey : Colors.white70,
-                                fontSize: 9,
-                                decoration: isCompleted ? TextDecoration.lineThrough : null,
-                              ),
+                                    ? Colors.grey.shade800.withOpacity(0.5)
+                                    : Colors.green.shade800.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: isActive
+                                  ? Colors.yellow
+                                  : isCompleted
+                                      ? Colors.grey
+                                      : Colors.green,
+                              width: isActive ? 2 : 1,
                             ),
                           ),
-                        ],
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                isCompleted ? Icons.check_circle : Icons.arrow_right,
+                                color: isActive
+                                    ? Colors.yellow
+                                    : isCompleted
+                                        ? Colors.grey
+                                        : Colors.green,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '${action['action_type']}: ${action['hex_restrictions']} (${action['hex_tiles']})',
+                                  style: TextStyle(
+                                    color: isCompleted ? Colors.grey : Colors.white70,
+                                    fontSize: 9,
+                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  // Show sub-steps when action is active
+                  if (isActive && action['sub_steps'] != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 24, bottom: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: (action['sub_steps'] as List).asMap().entries.map((subEntry) {
+                          final subIndex = subEntry.key;
+                          final subStep = subEntry.value;
+                          final currentSubStep = actionCurrentSubStep[index] ?? 0;
+                          final completedSubSteps = actionCompletedSubSteps[index] ?? {};
+                          final isSubCompleted = completedSubSteps.contains(subIndex);
+                          final isSubActive = currentSubStep == subIndex && !isSubCompleted;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSubCompleted ? Icons.check_box : Icons.check_box_outline_blank,
+                                  color: isSubActive
+                                      ? Colors.yellow
+                                      : isSubCompleted
+                                          ? Colors.grey
+                                          : Colors.white60,
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    subStep.toString().replaceAll('_', ' ').toUpperCase(),
+                                    style: TextStyle(
+                                      color: isSubActive
+                                          ? Colors.yellow
+                                          : isSubCompleted
+                                              ? Colors.grey
+                                              : Colors.white60,
+                                      fontSize: 8,
+                                      fontWeight: isSubActive ? FontWeight.bold : FontWeight.normal,
+                                      decoration: isSubCompleted ? TextDecoration.lineThrough : null,
+                                      backgroundColor: isSubActive ? Colors.yellow.withOpacity(0.2) : null,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ],
               );
             }).toList()),
           ],
@@ -466,64 +529,114 @@ class _CardGameScreenState extends State<CardGameScreen> {
   }
 
   void _onActionTapped(int actionIndex, dynamic action) {
+    // Don't allow re-clicking - actions only complete when units are ordered
+    if (activeActionIndex == actionIndex) {
+      print('Action already active - order units to complete it');
+      return;
+    }
+
     setState(() {
       activeActionIndex = actionIndex;
-
-      // Enable card action mode in Chexx engine
-      if (_chexxGameEngine != null) {
-        final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
-        chexxState.isCardActionActive = true;
-
-        // Set callback for when unit is ordered
-        chexxState.onUnitOrdered = () {
-          _completeAction(activeActionIndex!);
-        };
-
-        // Get all hexes with player's units
-        final currentPlayer = chexxState.currentPlayer;
-        final playerUnitHexes = <core_hex.HexCoordinate>{};
-
-        for (final unit in chexxState.simpleUnits) {
-          if (unit.owner == currentPlayer) {
-            playerUnitHexes.add(unit.position);
-          }
-        }
-
-        // Apply hex_tiles filter
-        final hexTilesFilter = action['hex_tiles'] as String?;
-        final hexRestrictions = action['hex_restrictions'] as String?;
-
-        // Filter hexes based on action restrictions
-        // For now, implement basic filtering (can be expanded based on actual needs)
-        if (hexTilesFilter != null && hexTilesFilter != 'none') {
-          // Filter by unit type/name
-          playerUnitHexes.removeWhere((hex) {
-            final unit = chexxState.simpleUnits.firstWhere(
-              (u) => u.position == hex,
-              orElse: () => SimpleGameUnit(
-                id: '',
-                unitType: '',
-                owner: Player.player1,
-                position: hex,
-                health: 0,
-                maxHealth: 0,
-                remainingMovement: 0,
-              ),
-            );
-            // If hex_tiles is a specific unit type name, exclude those units
-            return unit.unitType.toLowerCase() == hexTilesFilter.toLowerCase();
-          });
-        }
-
-        // Set highlighted hexes in game state
-        chexxState.highlightedHexes = playerUnitHexes;
-        _chexxGameEngine!.notifyListeners();
-      }
+      // Initialize sub-step tracking for this action
+      actionCurrentSubStep[actionIndex] = 0;
+      actionCompletedSubSteps[actionIndex] = {};
     });
+
+    // Apply special attributes from action (if any)
+    _applySpecialAttributes(action);
+
+    // Enable card action mode and highlight player's unit hexes
+    if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      chexxState.isCardActionActive = true;
+
+      // Clear wayfinding highlights when action is clicked
+      chexxState.moveAndFireHexes.clear();
+      chexxState.moveOnlyHexes.clear();
+
+      // Set up sub-step tracking callbacks
+      chexxState.onUnitSelected = () {
+        _advanceSubStep(actionIndex, 'unit_selection');
+      };
+
+      chexxState.onUnitMoved = () {
+        _advanceSubStep(actionIndex, 'before_combat_movement');
+      };
+
+      chexxState.onCombatOccurred = () {
+        _advanceSubStep(actionIndex, 'combat');
+      };
+
+      chexxState.onAfterCombatMovement = () {
+        _advanceSubStep(actionIndex, 'after_combat_movement');
+      };
+
+      // Set callback to complete action when unit is ordered
+      chexxState.onUnitOrdered = () {
+        print('DEBUG: Unit ordered - completing action $activeActionIndex');
+        _completeAction(activeActionIndex!);
+      };
+
+      // Highlight all hexes with current player's units
+      final currentPlayer = chexxState.currentPlayer;
+      final playerUnitHexes = <core_hex.HexCoordinate>{};
+
+      for (final unit in chexxState.simpleUnits) {
+        if (unit.owner == currentPlayer) {
+          playerUnitHexes.add(unit.position);
+        }
+      }
+
+      chexxState.highlightedHexes = playerUnitHexes;
+      print('HIGHLIGHT: Set ${playerUnitHexes.length} hexes to highlight');
+      if (playerUnitHexes.isNotEmpty) {
+        print('HIGHLIGHT: Sample hex: ${playerUnitHexes.first}');
+      }
+      print('HIGHLIGHT: Calling notifyListeners on Chexx engine');
+      _chexxGameEngine!.notifyListeners();
+      print('HIGHLIGHT: After notifyListeners');
+    } else {
+      print('DEBUG: ERROR - Chexx engine is null!');
+    }
+
     print('Action ${actionIndex} selected: ${action}');
   }
 
+  void _advanceSubStep(int actionIndex, String subStepName) {
+    if (!mounted) return;
+
+    setState(() {
+      final action = playedCard.card.actions![actionIndex];
+      final subSteps = action['sub_steps'] as List?;
+
+      if (subSteps == null) return;
+
+      // Find the index of this sub-step
+      final subStepIndex = subSteps.indexWhere((step) => step == subStepName);
+
+      if (subStepIndex == -1) {
+        print('Sub-step $subStepName not found in action');
+        return;
+      }
+
+      // Mark this sub-step as completed
+      final completedSteps = actionCompletedSubSteps[actionIndex] ?? {};
+      completedSteps.add(subStepIndex);
+      actionCompletedSubSteps[actionIndex] = completedSteps;
+
+      // Advance to next sub-step if there is one
+      if (subStepIndex + 1 < subSteps.length) {
+        actionCurrentSubStep[actionIndex] = subStepIndex + 1;
+      }
+
+      print('Sub-step completed: $subStepName (index $subStepIndex), next: ${actionCurrentSubStep[actionIndex]}');
+    });
+  }
+
   void _completeAction(int actionIndex) {
+    // Restore original unit attributes
+    _restoreOriginalAttributes();
+
     setState(() {
       completedActions.add(actionIndex);
       activeActionIndex = null;
@@ -534,6 +647,11 @@ class _CardGameScreenState extends State<CardGameScreen> {
         chexxState.isCardActionActive = false;
         chexxState.highlightedHexes.clear();
         chexxState.onUnitOrdered = null;
+        // Clear sub-step callbacks
+        chexxState.onUnitSelected = null;
+        chexxState.onUnitMoved = null;
+        chexxState.onCombatOccurred = null;
+        chexxState.onAfterCombatMovement = null;
         _chexxGameEngine!.notifyListeners();
       }
 
@@ -544,6 +662,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
         cardGameState.moveCardFromPlay(playedCard, f_card.CardZone.discard);
         playedCard = null;
         completedActions.clear();
+        allActionsComplete = true; // Signal that turn is ready to end
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -556,6 +675,60 @@ class _CardGameScreenState extends State<CardGameScreen> {
         );
       }
     });
+  }
+
+  void _applySpecialAttributes(dynamic action) {
+    if (_chexxGameEngine == null) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+    final currentPlayer = chexxState.currentPlayer;
+
+    // Check if action has special attributes
+    final specialAttributes = action['special'];
+    if (specialAttributes == null) return;
+
+    print('Applying special attributes: $specialAttributes');
+
+    // Store original values and apply special attributes to current player's units
+    unitOriginalValues.clear();
+    for (final unit in chexxState.simpleUnits) {
+      if (unit.owner == currentPlayer) {
+        // Store original move_after_combat value (default is unit's base value)
+        final originalMoveAfterCombat = chexxState.unitMoveAfterCombatBonus[unit.id] ?? unit.moveAfterCombat;
+        unitOriginalValues[unit.id] = {
+          'move_after_combat': originalMoveAfterCombat,
+        };
+
+        // Apply special attributes
+        if (specialAttributes['move_after_combat'] != null) {
+          final bonusValue = specialAttributes['move_after_combat'] as int;
+          chexxState.unitMoveAfterCombatBonus[unit.id] = unit.moveAfterCombat + bonusValue;
+          print('Unit ${unit.id} (${unit.unitType}) move_after_combat: ${unit.moveAfterCombat} + $bonusValue = ${chexxState.unitMoveAfterCombatBonus[unit.id]}');
+        }
+      }
+    }
+  }
+
+  void _restoreOriginalAttributes() {
+    if (_chexxGameEngine == null || unitOriginalValues.isEmpty) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+
+    print('Restoring original attributes for ${unitOriginalValues.length} units');
+
+    // Restore or clear move_after_combat bonuses
+    for (final unitId in unitOriginalValues.keys) {
+      final originalValues = unitOriginalValues[unitId]!;
+      final originalMoveAfterCombat = originalValues['move_after_combat'] as int;
+
+      if (originalMoveAfterCombat == 0) {
+        chexxState.unitMoveAfterCombatBonus.remove(unitId);
+      } else {
+        chexxState.unitMoveAfterCombatBonus[unitId] = originalMoveAfterCombat;
+      }
+    }
+
+    unitOriginalValues.clear();
   }
 
   Widget _buildSelectedCardPanel() {
@@ -698,6 +871,13 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
     // End turn in Chexx engine
     if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+
+      // Clear all highlights when turn ends
+      chexxState.moveAndFireHexes.clear();
+      chexxState.moveOnlyHexes.clear();
+      chexxState.attackRangeHexes.clear();
+
       _chexxGameEngine!.endTurn();
     }
 
@@ -705,6 +885,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       selectedCard = null; // Clear selected card for next turn
       playedCard = null;
       completedActions.clear();
+      allActionsComplete = false; // Reset button color for next turn
       activeActionIndex = null;
     });
   }

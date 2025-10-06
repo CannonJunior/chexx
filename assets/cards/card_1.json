@@ -1,9 +1,29 @@
 {
   "id": "card_1",
-  "name": "Card 1",
-  "description": "This is card number 1. Type: attack. A powerful card for your deck.",
+  "name": "Behind Enemy Lines",
+  "description": "Choose an Infantry unit. This unit can move 3 spaces, attack with an additional die, and then move 3 spaces after combat.",
   "cost": 0,
   "type": "attack",
+  "special": {
+    "name": "Infantry",
+    "health": 1,
+    "max_health": 4,
+    "movement_range": 3,
+    "move_and_fire": 3,
+    "move_only": 3,
+    "move_after_combat": 3,
+    "attack_range": 3,
+    "attack_damage": [
+      4,
+      3,
+      2
+    ],
+    "movement_type": "adjacent",
+    "is_incrementable": true,
+    "symbol": "I",
+    "game_type": "wwii",
+    "description": "Behind Enemy Lines"
+  },
   "attributes": {
     "power": 2,
     "rarity": "common"
@@ -13,7 +33,33 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name"
+      "hex_tiles": "name",
+      "special": {
+        "name": "Infantry",
+        "health": 1,
+        "max_health": 4,
+        "movement_range": 3,
+        "move_and_fire": 3,
+        "move_only": 3,
+        "move_after_combat": 3,
+        "attack_range": 3,
+        "attack_damage": [
+          4,
+          3,
+          2
+        ],
+        "movement_type": "adjacent",
+        "is_incrementable": true,
+        "symbol": "I",
+        "game_type": "wwii",
+        "description": "Behind Enemy Lines"
+      },
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
     }
   ]
 }

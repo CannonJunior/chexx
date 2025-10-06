@@ -1,9 +1,9 @@
 {
-  "id": "card_7",
-  "name": "Card 7",
-  "description": "This is card number 7. Type: support. A powerful card for your deck.",
-  "cost": 6,
-  "type": "support",
+  "id": "card_2",
+  "name": "Card 2",
+  "description": "This is card number 2. Type: defense. A powerful card for your deck.",
+  "cost": 1,
+  "type": "defense",
   "attributes": {
     "power": 3,
     "rarity": "common"
@@ -13,7 +13,24 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name"
+      "hex_tiles": "name",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "name",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
     }
   ]
 }

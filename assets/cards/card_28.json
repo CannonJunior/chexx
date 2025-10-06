@@ -13,7 +13,13 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name"
+      "hex_tiles": "name",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
     }
   ]
 }

@@ -63,8 +63,6 @@ class ChexxGameEngine extends GameEngineBase {
 
     // Convert screen position to hex coordinate using current orientation
     final hexCoord = _screenToHex(position, canvasSize);
-    print('DEBUG: HANDLE TAP - Screen position: $position, Canvas size: $canvasSize');
-    print('DEBUG: HANDLE TAP - Converted to hex: $hexCoord, Orientation: ${(gameState as ChexxGameState).hexOrientation.name}');
 
     if (hexCoord != null) {
       handleHexTap(hexCoord);
@@ -72,6 +70,8 @@ class ChexxGameEngine extends GameEngineBase {
   }
 
   HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {
+    final chexxGameState = gameState as ChexxGameState;
+
     // Convert screen position to game world position
     final centerX = canvasSize.width / 2;
     final centerY = canvasSize.height / 2;
@@ -79,19 +79,45 @@ class ChexxGameEngine extends GameEngineBase {
     final gameX = screenPos.dx - centerX;
     final gameY = screenPos.dy - centerY;
 
-    print('DEBUG: SCREEN TO HEX - Game coordinates: ($gameX, $gameY), Orientation: ${(gameState as ChexxGameState).hexOrientation.name}');
+    // Convert pixel to hex using orientation-aware math
+    final hexSize = 50.0;
+    double q, r;
 
-    final hexCoord = HexCoordinate.fromPixel(gameX, gameY, 50.0);
-    print('DEBUG: SCREEN TO HEX - Result: $hexCoord');
+    if (chexxGameState.hexOrientation == HexOrientation.flat) {
+      // Flat-top orientation
+      q = (2.0 / 3.0 * gameX) / hexSize;
+      r = (-1.0 / 3.0 * gameX + sqrt(3) / 3.0 * gameY) / hexSize;
+    } else {
+      // Pointy-top orientation
+      q = (sqrt(3) / 3.0 * gameX - 1.0 / 3.0 * gameY) / hexSize;
+      r = (2.0 / 3.0 * gameY) / hexSize;
+    }
 
-    return hexCoord;
+    // Round to integer coordinates
+    final s = -q - r;
+    var rQ = q.round();
+    var rR = r.round();
+    var rS = s.round();
+
+    final qDiff = (rQ - q).abs();
+    final rDiff = (rR - r).abs();
+    final sDiff = (rS - s).abs();
+
+    if (qDiff > rDiff && qDiff > sDiff) {
+      rQ = -rR - rS;
+    } else if (rDiff > sDiff) {
+      rR = -rQ - rS;
+    } else {
+      rS = -rQ - rR;
+    }
+
+    return HexCoordinate(rQ, rR, rS);
   }
 
   @override
   void handleHexTap(HexCoordinate hexCoord) {
     final chexxGameState = gameState as ChexxGameState;
 
-    print('DEBUG: HEX TAP - Hex tapped at: $hexCoord, Current orientation: ${(gameState as ChexxGameState).hexOrientation.name}');
 
     // Find unit at this position using simple loop
     SimpleGameUnit? unitAtPosition;
@@ -109,9 +135,27 @@ class ChexxGameEngine extends GameEngineBase {
         for (final unit in chexxGameState.simpleUnits) {
           unit.isSelected = false;
         }
+        // Clear previous wayfinding, attack range, and targeted enemy
+        chexxGameState.moveAndFireHexes.clear();
+        chexxGameState.moveOnlyHexes.clear();
+        chexxGameState.attackRangeHexes.clear();
+        chexxGameState.targetedEnemy = null;
         // Select this unit
         unitAtPosition.isSelected = true;
         print('Selected unit: ${unitAtPosition.id}');
+
+        // Calculate wayfinding for the selected unit
+        chexxGameState.calculateWayfinding(unitAtPosition);
+
+        // Calculate attack range for the selected unit
+        chexxGameState.calculateAttackRange(unitAtPosition);
+
+        // Notify card game if in card mode (unit selected)
+        if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitSelected != null) {
+          chexxGameState.onUnitSelected!();
+        }
+
+        notifyListeners();
       } else {
         // Enemy unit - try to attack if we have a selected unit
         SimpleGameUnit? selectedUnit;
@@ -140,46 +184,129 @@ class ChexxGameEngine extends GameEngineBase {
           final attackRange = _getUnitAttackRange(selectedUnit.unitType);
 
           if (distance <= attackRange) {
-            // Attack the target unit
-            // Roll dice for attack
-            final diceRollResults = _performDiceBasedAttack(selectedUnit, unitAtPosition);
-            final damage = diceRollResults.$1;
-            final diceRolls = diceRollResults.$2;
+            // Two-click attack system: first click targets, second click confirms
+            if (chexxGameState.targetedEnemy == unitAtPosition) {
+              // Second click on same enemy - perform attack
+              print('Confirming attack on ${unitAtPosition.unitType}');
 
-            // Record dice roll results for display
-            final result = '$damage damage dealt';
-            chexxGameState.recordDiceRoll(diceRolls, result);
-            final newHealth = (unitAtPosition.health - damage).clamp(0, unitAtPosition.maxHealth).toInt();
+              // Check if this is a special attack by a tank (after overrun)
+              final isSpecialAttack = selectedUnit.unitType == 'armor' &&
+                                     (chexxGameState.unitCanSpecialAttack[selectedUnit.id] ?? false) &&
+                                     !(chexxGameState.unitUsedSpecialAttack[selectedUnit.id] ?? false);
 
-            print('${selectedUnit.unitType} attacks ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
+              // Attack the target unit
+              // Roll dice for attack
+              final diceRollResults = _performDiceBasedAttack(selectedUnit, unitAtPosition);
+              final damage = diceRollResults.$1;
+              final diceRolls = diceRollResults.$2;
 
-            if (newHealth <= 0) {
-              // Remove dead unit
-              chexxGameState.simpleUnits.remove(unitAtPosition);
-              print('${unitAtPosition.unitType} destroyed!');
-            } else {
-              // Update damaged unit
-              final updatedUnit = SimpleGameUnit(
-                id: unitAtPosition.id,
-                unitType: unitAtPosition.unitType,
-                owner: unitAtPosition.owner,
-                position: unitAtPosition.position,
-                health: newHealth,
-                maxHealth: unitAtPosition.maxHealth,
-                remainingMovement: unitAtPosition.remainingMovement,
-                isSelected: unitAtPosition.isSelected,
-              );
+              // Record dice roll results for display
+              final result = '$damage damage dealt';
+              chexxGameState.recordDiceRoll(diceRolls, result);
+              final newHealth = (unitAtPosition.health - damage).clamp(0, unitAtPosition.maxHealth).toInt();
 
-              final index = chexxGameState.simpleUnits.indexOf(unitAtPosition);
-              if (index != -1) {
-                chexxGameState.simpleUnits[index] = updatedUnit;
+              if (isSpecialAttack) {
+                print('${selectedUnit.unitType} makes SPECIAL ATTACK on ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
+                // Mark special attack as used and clear the ability
+                chexxGameState.unitUsedSpecialAttack[selectedUnit.id] = true;
+                chexxGameState.unitCanSpecialAttack[selectedUnit.id] = false;
+              } else {
+                print('${selectedUnit.unitType} attacks ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
               }
-              print('${unitAtPosition.unitType} health: $newHealth/${unitAtPosition.maxHealth}');
-            }
 
-            // Notify card game if in card mode (action completed)
-            if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitOrdered != null) {
-              chexxGameState.onUnitOrdered!();
+              // Notify card game if in card mode (combat occurred)
+              if (chexxGameState.gameMode == 'card' && chexxGameState.onCombatOccurred != null) {
+                chexxGameState.onCombatOccurred!();
+              }
+
+              // Clear targeted enemy after attack
+              chexxGameState.targetedEnemy = null;
+
+              if (newHealth <= 0) {
+                // Remove dead unit
+                final destroyedPosition = unitAtPosition.position;
+                chexxGameState.simpleUnits.remove(unitAtPosition);
+                print('${unitAtPosition.unitType} destroyed!');
+
+                // Combat movement (overrun): Tanks and Infantry can move into the hex
+                if (selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry') {
+                  // Calculate move_after_combat: base value + bonus from card action
+                  final moveAfterCombat = selectedUnit.moveAfterCombat +
+                                         (chexxGameState.unitMoveAfterCombatBonus[selectedUnit.id] ?? 0);
+
+                  // Move attacking unit to the now-empty hex with additional movement if applicable
+                  final updatedAttacker = SimpleGameUnit(
+                    id: selectedUnit.id,
+                    unitType: selectedUnit.unitType,
+                    owner: selectedUnit.owner,
+                    position: destroyedPosition,
+                    health: selectedUnit.health,
+                    maxHealth: selectedUnit.maxHealth,
+                    remainingMovement: selectedUnit.remainingMovement + moveAfterCombat,
+                    moveAfterCombat: selectedUnit.moveAfterCombat,
+                    isSelected: true,
+                  );
+
+                  final attackerIndex = chexxGameState.simpleUnits.indexOf(selectedUnit);
+                  if (attackerIndex != -1) {
+                    chexxGameState.simpleUnits[attackerIndex] = updatedAttacker;
+                  }
+
+                  if (moveAfterCombat > 0) {
+                    print('${selectedUnit.unitType} moves into conquered hex (combat movement) and gains $moveAfterCombat additional movement');
+                  } else {
+                    print('${selectedUnit.unitType} moves into conquered hex (combat movement)');
+                  }
+
+                  // Notify card game if in card mode (after combat movement)
+                  if (chexxGameState.gameMode == 'card' && chexxGameState.onAfterCombatMovement != null) {
+                    chexxGameState.onAfterCombatMovement!();
+                  }
+
+                  // If tank, enable special attack (if not already used this turn)
+                  if (selectedUnit.unitType == 'armor') {
+                    if (!(chexxGameState.unitUsedSpecialAttack[selectedUnit.id] ?? false)) {
+                      chexxGameState.unitCanSpecialAttack[selectedUnit.id] = true;
+                      print('${selectedUnit.unitType} can now make a special attack!');
+                    }
+                  }
+
+                  // Recalculate attack range for new position (but not wayfinding during card actions)
+                  chexxGameState.calculateAttackRange(updatedAttacker);
+                }
+              } else {
+                // Update damaged unit
+                final updatedUnit = SimpleGameUnit(
+                  id: unitAtPosition.id,
+                  unitType: unitAtPosition.unitType,
+                  owner: unitAtPosition.owner,
+                  position: unitAtPosition.position,
+                  health: newHealth,
+                  maxHealth: unitAtPosition.maxHealth,
+                  remainingMovement: unitAtPosition.remainingMovement,
+                  moveAfterCombat: unitAtPosition.moveAfterCombat,
+                  isSelected: unitAtPosition.isSelected,
+                );
+
+                final index = chexxGameState.simpleUnits.indexOf(unitAtPosition);
+                if (index != -1) {
+                  chexxGameState.simpleUnits[index] = updatedUnit;
+                }
+                print('${unitAtPosition.unitType} health: $newHealth/${unitAtPosition.maxHealth}');
+              }
+
+              // Clear attack range highlights after attacking
+              chexxGameState.attackRangeHexes.clear();
+
+              // Notify card game if in card mode (action completed)
+              if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitOrdered != null) {
+                chexxGameState.onUnitOrdered!();
+              }
+            } else {
+              // First click on enemy - target it for attack
+              chexxGameState.targetedEnemy = unitAtPosition;
+              print('Targeting ${unitAtPosition.unitType} for attack - click again to confirm');
+              notifyListeners();
             }
           } else {
             print('Target out of range (distance: $distance, range: $attackRange)');
@@ -187,6 +314,9 @@ class ChexxGameEngine extends GameEngineBase {
         }
       }
     } else {
+      // Clicking on empty hex - clear targeted enemy
+      chexxGameState.targetedEnemy = null;
+
       // Try to move selected unit to this position
       SimpleGameUnit? selectedUnit;
       for (final unit in chexxGameState.simpleUnits) {
@@ -210,11 +340,13 @@ class ChexxGameEngine extends GameEngineBase {
           }
         }
 
-        // Movement validation based on unit type
-        final distance = selectedUnit.position.distanceTo(hexCoord);
-        final movementRange = _getUnitMovementRange(selectedUnit.unitType);
+        // Movement validation - check if hex is reachable via wayfinding
+        final isInMoveAndFire = chexxGameState.moveAndFireHexes.contains(hexCoord);
+        final isInMoveOnly = chexxGameState.moveOnlyHexes.contains(hexCoord);
 
-        if (distance <= movementRange && selectedUnit.remainingMovement >= distance) {
+        if (isInMoveAndFire || isInMoveOnly) {
+          // Calculate actual movement cost for this hex
+          final distance = selectedUnit.position.distanceTo(hexCoord);
           // Create new unit with updated position and reduced movement
           final updatedUnit = SimpleGameUnit(
             id: selectedUnit.id,
@@ -224,6 +356,7 @@ class ChexxGameEngine extends GameEngineBase {
             health: selectedUnit.health,
             maxHealth: selectedUnit.maxHealth,
             remainingMovement: selectedUnit.remainingMovement - distance,
+            moveAfterCombat: selectedUnit.moveAfterCombat,
             isSelected: true,
           );
 
@@ -234,10 +367,23 @@ class ChexxGameEngine extends GameEngineBase {
           }
           print('Moved unit to: $hexCoord');
 
-          // Notify card game if in card mode (action completed)
-          if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitOrdered != null) {
-            chexxGameState.onUnitOrdered!();
+          // Clear targeted enemy and wayfinding highlights after moving
+          chexxGameState.targetedEnemy = null;
+          chexxGameState.moveAndFireHexes.clear();
+          chexxGameState.moveOnlyHexes.clear();
+
+          // Recalculate attack range for new position (but not wayfinding during card actions)
+          chexxGameState.calculateAttackRange(updatedUnit);
+
+          // Notify card game if in card mode (unit moved)
+          if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitMoved != null) {
+            chexxGameState.onUnitMoved!();
           }
+
+          // Don't complete action after movement - allow unit to attack first
+          // Action will complete when attack is made or another unit is ordered
+        } else {
+          print('Cannot move to this hex - not within reachable range');
         }
       }
     }
@@ -258,6 +404,8 @@ class ChexxGameEngine extends GameEngineBase {
     for (final u in gameState.simpleUnits) {
       u.isSelected = false;
     }
+    gameState.attackRangeHexes.clear();
+    gameState.targetedEnemy = null;
   }
 
   void _moveSimpleUnit(ChexxGameState gameState, SimpleGameUnit unit, HexCoordinate target) {
@@ -271,6 +419,7 @@ class ChexxGameEngine extends GameEngineBase {
       health: unit.health,
       maxHealth: unit.maxHealth,
       remainingMovement: unit.remainingMovement - distance,
+      moveAfterCombat: unit.moveAfterCombat,
       isSelected: unit.isSelected,
     );
 
@@ -296,6 +445,7 @@ class ChexxGameEngine extends GameEngineBase {
         health: newHealth,
         maxHealth: target.maxHealth,
         remainingMovement: target.remainingMovement,
+        moveAfterCombat: target.moveAfterCombat,
         isSelected: target.isSelected,
       );
 
@@ -425,7 +575,6 @@ class ChexxGameEngine extends GameEngineBase {
     // Use gameState's orientation instead of engine's local orientation
     final currentOrientation = (gameState as ChexxGameState).hexOrientation;
 
-    print('DEBUG: GET HEX VERTICES - Orientation: ${currentOrientation.name}, Hex: $hex');
 
     for (int i = 0; i < 6; i++) {
       // Calculate hexagon vertices based on orientation
@@ -443,7 +592,6 @@ class ChexxGameEngine extends GameEngineBase {
       vertices.add(Offset(x, y));
     }
 
-    print('DEBUG: GET HEX VERTICES - Generated ${vertices.length} vertices for ${currentOrientation.name} orientation');
     return vertices;
   }
 }
@@ -504,36 +652,12 @@ class ChexxGamePainter extends CustomPainter {
   }
 
   void _drawHexTiles(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Debug: Log comprehensive tile data validation
-    print('DEBUG: TILE DATA VALIDATION START');
-    print('DEBUG: Total tiles in gameState.board.allTiles: ${gameState.board.allTiles.length}');
-    print('DEBUG: Current hex orientation: ${(engine.gameState as ChexxGameState).hexOrientation.name}');
-
-    // Validate board structure
     if (gameState.board.allTiles.isEmpty) {
-      print('DEBUG: ERROR - No tiles found in game board!');
       return;
     }
 
-    // Sample a few tiles for detailed validation
-    final sampleTiles = gameState.board.allTiles.take(5).toList();
-    for (int i = 0; i < sampleTiles.length; i++) {
-      final tile = sampleTiles[i];
-      print('DEBUG: Sample tile $i - Coordinate: (${tile.coordinate.q},${tile.coordinate.r},${tile.coordinate.s})');
-      print('DEBUG: Sample tile $i - Type: ${tile.type.name}');
-      print('DEBUG: Sample tile $i - Type toString: ${tile.type.toString()}');
-      print('DEBUG: Sample tile $i - Available properties: ${tile.type}');
-    }
-
-    // Count tiles by type
-    final typeCounts = <String, int>{};
-    for (final tile in gameState.board.allTiles) {
-      final typeName = tile.type.name;
-      typeCounts[typeName] = (typeCounts[typeName] ?? 0) + 1;
-    }
-    print('DEBUG: Tile type distribution: $typeCounts');
-
     // Draw board tiles from game state (supporting custom scenarios)
+    int matchCount = 0;
     for (final tile in gameState.board.allTiles) {
       final hex = HexCoordinate(tile.coordinate.q, tile.coordinate.r, tile.coordinate.s);
       final vertices = engine.getHexVertices(hex, size);
@@ -554,9 +678,7 @@ class ChexxGamePainter extends CustomPainter {
           tilePaint = _metaPaint;
         } else {
           // Use centralized tile colors from TileColors utility
-          print('DEBUG: Processing tile type: "${tile.type}"');
           tilePaint = TileColors.getPaintForTileType(tile.type);
-          print('DEBUG: Applied ${tile.type} paint to tile');
         }
 
         // Fill hex
@@ -575,72 +697,77 @@ class ChexxGamePainter extends CustomPainter {
           canvas.drawPath(path, _attackPaint);
         }
 
-        // Highlight hexes for card actions (use player's color for border)
-        if (gameState.highlightedHexes.contains(tile.coordinate)) {
-          // Get current player's color
+        // Highlight hexes for card actions (use player's color overlay)
+        // Convert tile coordinate to core HexCoordinate for comparison
+        final coreCoord = HexCoordinate(tile.coordinate.q, tile.coordinate.r, tile.coordinate.s);
+        if (gameState.highlightedHexes.contains(coreCoord)) {
+          matchCount++;
+          // Get current player's color with alpha
           final playerColor = gameState.currentPlayer == Player.player1
-              ? Colors.blue
-              : Colors.red;
+              ? Colors.blue.withOpacity(0.37)
+              : Colors.red.withOpacity(0.37);
 
-          final highlightBorder = Paint()
+          final highlightOverlay = Paint()
             ..color = playerColor
+            ..style = PaintingStyle.fill;
+          canvas.drawPath(path, highlightOverlay);
+        }
+
+        // Wayfinding: Highlight move_and_fire hexes (green)
+        if (gameState.moveAndFireHexes.contains(coreCoord)) {
+          final greenOverlay = Paint()
+            ..color = Colors.green.withOpacity(0.37)
+            ..style = PaintingStyle.fill;
+          canvas.drawPath(path, greenOverlay);
+        }
+
+        // Wayfinding: Highlight move_only hexes (yellow)
+        if (gameState.moveOnlyHexes.contains(coreCoord)) {
+          final yellowOverlay = Paint()
+            ..color = Colors.yellow.withOpacity(0.37)
+            ..style = PaintingStyle.fill;
+          canvas.drawPath(path, yellowOverlay);
+        }
+
+        // Attack range: Highlight enemy hexes with red, varying alpha by damage
+        if (gameState.attackRangeHexes.containsKey(coreCoord)) {
+          final damage = gameState.attackRangeHexes[coreCoord]!;
+          // Map damage to alpha: 1=0.20, 2=0.40, 3=0.60, 4=0.80
+          final alpha = (damage * 0.20).clamp(0.20, 0.80);
+          final redOverlay = Paint()
+            ..color = Colors.red.withOpacity(alpha)
+            ..style = PaintingStyle.fill;
+          canvas.drawPath(path, redOverlay);
+        }
+
+        // Targeted enemy: Draw bright orange outline
+        if (gameState.targetedEnemy != null && gameState.targetedEnemy!.position == coreCoord) {
+          final targetOutline = Paint()
+            ..color = Colors.orange
             ..style = PaintingStyle.stroke
             ..strokeWidth = 4;
-          canvas.drawPath(path, highlightBorder);
+          canvas.drawPath(path, targetOutline);
         }
       }
     }
-    print('DEBUG: TILE DATA VALIDATION END');
+
+    if (gameState.highlightedHexes.isNotEmpty && matchCount == 0) {
+      print('HIGHLIGHT ERROR: 0 matches found! Highlighted: ${gameState.highlightedHexes.first}, Sample tile: ${gameState.board.allTiles.first.coordinate}');
+    }
   }
 
   void _drawUnits(Canvas canvas, Size size, ChexxGameState gameState) {
-    // Debug: Log comprehensive unit data validation
-    print('DEBUG: UNIT DATA VALIDATION START');
-    print('DEBUG: Total units in gameState.simpleUnits: ${gameState.simpleUnits.length}');
-
-    // Validate unit structure
     if (gameState.simpleUnits.isEmpty) {
-      print('DEBUG: WARNING - No units found in game state!');
       return;
     }
 
-    // Count units by type and owner
-    final unitTypeCounts = <String, int>{};
-    final ownerCounts = <Player, int>{};
-
-    for (final unit in gameState.simpleUnits) {
-      // Count by type
-      unitTypeCounts[unit.unitType] = (unitTypeCounts[unit.unitType] ?? 0) + 1;
-      // Count by owner
-      ownerCounts[unit.owner] = (ownerCounts[unit.owner] ?? 0) + 1;
-    }
-
-    print('DEBUG: Unit type distribution: $unitTypeCounts');
-    print('DEBUG: Unit owner distribution: $ownerCounts');
-
-    // Validate each unit in detail
     for (int i = 0; i < gameState.simpleUnits.length; i++) {
       final unit = gameState.simpleUnits[i];
-      print('DEBUG: Unit $i validation:');
-      print('DEBUG:   Position: (${unit.position.q},${unit.position.r},${unit.position.s})');
-      print('DEBUG:   Type: "${unit.unitType}"');
-      print('DEBUG:   Owner: ${unit.owner}');
-      print('DEBUG:   Health: ${unit.health}/${unit.maxHealth}');
-      print('DEBUG:   Selected: ${unit.isSelected}');
-      print('DEBUG:   Movement: ${unit.remainingMovement}');
-
-      // Validate unit type against expected types
-      final validTypes = ['minor', 'scout', 'knight', 'guardian'];
-      if (!validTypes.contains(unit.unitType)) {
-        print('DEBUG:   ERROR - Invalid unit type: "${unit.unitType}"');
-        print('DEBUG:   ERROR - Expected one of: $validTypes');
-      }
 
       final center = engine.hexToScreen(unit.position, size);
 
       // Check if unit is incrementable
       final isIncrementable = _isUnitIncrementable(unit.unitType);
-      print('DEBUG:   Is incrementable: $isIncrementable');
 
       if (isIncrementable) {
         _drawIncrementableUnit(canvas, center, unit);
@@ -648,7 +775,6 @@ class ChexxGamePainter extends CustomPainter {
         _drawStandardUnit(canvas, center, unit);
       }
     }
-    print('DEBUG: UNIT DATA VALIDATION END');
   }
 
   void _drawStandardUnit(Canvas canvas, Offset center, SimpleGameUnit unit) {
@@ -1047,6 +1173,43 @@ class ChexxGamePainter extends CustomPainter {
           canvas.drawPath(path, strokePaint);
           break;
       }
+
+      // Draw structure symbol (same as scenario builder)
+      final symbol = _getStructureSymbol(placedStructure.type);
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: symbol,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: engine.hexSize * 0.4,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(
+          center.dx - textPainter.width / 2,
+          center.dy - textPainter.height / 2,
+        ),
+      );
+    }
+  }
+
+  String _getStructureSymbol(StructureType type) {
+    switch (type) {
+      case StructureType.bunker:
+        return 'B';
+      case StructureType.bridge:
+        return '=';
+      case StructureType.sandbag:
+        return 'S';
+      case StructureType.barbwire:
+        return 'W';
+      case StructureType.dragonsTeeth:
+        return 'T';
     }
   }
 

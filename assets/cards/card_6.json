@@ -1,19 +1,36 @@
 {
-  "id": "card_6",
-  "name": "Card 6",
-  "description": "This is card number 6. Type: defense. A powerful card for your deck.",
-  "cost": 5,
+  "id": "card_2",
+  "name": "Card 2",
+  "description": "This is card number 2. Type: defense. A powerful card for your deck.",
+  "cost": 1,
   "type": "defense",
   "attributes": {
-    "power": 2,
-    "rarity": "rare"
+    "power": 3,
+    "rarity": "common"
   },
   "imageAsset": "",
   "actions": [
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name"
+      "hex_tiles": "name",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "name",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
     }
   ]
 }

@@ -38,6 +38,7 @@ class SimpleGameUnit {
   final int health;
   final int maxHealth;
   final int remainingMovement;
+  final int moveAfterCombat;
   bool isSelected;
 
   SimpleGameUnit({
@@ -48,6 +49,7 @@ class SimpleGameUnit {
     required this.health,
     required this.maxHealth,
     required this.remainingMovement,
+    this.moveAfterCombat = 0,
     this.isSelected = false,
   });
 }
@@ -86,6 +88,29 @@ class ChexxGameState extends GameStateBase {
 
   // Card mode: callback when unit is ordered (for completing card actions)
   void Function()? onUnitOrdered;
+
+  // Card mode: callbacks for sub-step tracking
+  void Function()? onUnitSelected;
+  void Function()? onUnitMoved;
+  void Function()? onCombatOccurred;
+  void Function()? onAfterCombatMovement;
+
+  // Wayfinding: hexes reachable with move_and_fire (green)
+  Set<core_hex.HexCoordinate> moveAndFireHexes = {};
+
+  // Wayfinding: hexes reachable with move_only (yellow)
+  Set<core_hex.HexCoordinate> moveOnlyHexes = {};
+
+  // Attack range highlighting: hexes within attack range mapped to expected damage
+  Map<core_hex.HexCoordinate, int> attackRangeHexes = {};
+
+  // Targeted enemy unit for attack (requires two clicks: first to target, second to confirm)
+  SimpleGameUnit? targetedEnemy;
+
+  // Combat movement tracking
+  Map<String, bool> unitUsedSpecialAttack = {}; // Track which tanks used special attack this turn
+  Map<String, bool> unitCanSpecialAttack = {}; // Track which tanks can currently make special attack (after overrun)
+  Map<String, int> unitMoveAfterCombatBonus = {}; // Track temporary move_after_combat bonuses from card actions
 
   @override
   void initializeGame() {
@@ -151,6 +176,10 @@ class ChexxGameState extends GameStateBase {
   void endTurn() {
     // Reset movement for all units of the next player
     _resetPlayerMovement();
+
+    // Clear special attack tracking for new turn
+    unitUsedSpecialAttack.clear();
+    unitCanSpecialAttack.clear();
 
     // Switch players
     currentPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
@@ -397,6 +426,7 @@ class ChexxGameState extends GameStateBase {
           health: actualHealth,
           maxHealth: maxHealth,
           remainingMovement: _getUnitMovement(unitType),
+          moveAfterCombat: 0,
         );
 
         simpleUnits.add(unit);
@@ -547,6 +577,7 @@ class ChexxGameState extends GameStateBase {
       health: _getUnitHealth(unitType),
       maxHealth: _getUnitMaxHealth(unitType),
       remainingMovement: _getUnitMovement(unitType),
+      moveAfterCombat: 0,
     );
   }
 
@@ -604,9 +635,275 @@ class ChexxGameState extends GameStateBase {
     }
   }
 
+  /// Calculate reachable hexes for a unit using BFS pathfinding
+  void calculateWayfinding(SimpleGameUnit unit, {int? moveAndFireBonus, int? moveOnlyBonus}) {
+    moveAndFireHexes.clear();
+    moveOnlyHexes.clear();
+
+    // Get unit's movement stats from unit type config
+    final baseMoveAndFire = _getUnitMoveAndFire(unit.unitType);
+    final baseMoveOnly = _getUnitMoveOnly(unit.unitType);
+
+    // Use the lesser of remaining movement or base movement capability
+    final moveAndFire = baseMoveAndFire.clamp(0, unit.remainingMovement);
+    final moveOnly = baseMoveOnly.clamp(0, unit.remainingMovement);
+
+    // Apply bonuses from cards if any
+    final actualMoveAndFire = moveAndFire + (moveAndFireBonus ?? 0);
+    final actualMoveOnly = moveOnly + (moveOnlyBonus ?? 0);
+
+    // Check if unit is in barbwire - cannot move
+    for (final structure in placedStructures) {
+      if (structure.position.q == unit.position.q &&
+          structure.position.r == unit.position.r &&
+          structure.position.s == unit.position.s) {
+        final structureType = structure.type.name.toLowerCase();
+        if (structureType == 'barbwire' || structureType == 'barbed_wire') {
+          // Cannot move from barbwire
+          return;
+        }
+      }
+    }
+
+    // Check if unit is in hedgerow - can only move 1 hex
+    bool inHedgerow = false;
+    for (final tile in board.allTiles) {
+      if (tile.coordinate.q == unit.position.q &&
+          tile.coordinate.r == unit.position.r &&
+          tile.coordinate.s == unit.position.s &&
+          tile.type.name.toLowerCase() == 'hedgerow') {
+        inHedgerow = true;
+        break;
+      }
+    }
+
+    // Use BFS to find all reachable hexes
+    final visited = <core_hex.HexCoordinate, int>{}; // hex -> distance
+    final queue = <(core_hex.HexCoordinate, int)>[];
+
+    queue.add((unit.position, 0));
+    visited[unit.position] = 0;
+
+    while (queue.isNotEmpty) {
+      final (currentHex, distance) = queue.removeAt(0);
+
+      // Hedgerow restriction: can only move to 1 adjacent hex
+      if (inHedgerow && distance >= 1) {
+        continue; // Stop expanding after 1 move
+      }
+
+      // Get all adjacent hexes
+      final neighbors = _getAdjacentHexes(currentHex);
+
+      for (final neighbor in neighbors) {
+        // Skip if already visited
+        if (visited.containsKey(neighbor)) continue;
+
+        // Get movement cost
+        final moveCost = _getHexMovementCost(neighbor, unit, currentHex);
+        if (moveCost == 0) continue; // Impassable
+
+        final newDistance = distance + moveCost;
+
+        // Barbwire: must stop here (cost 999)
+        if (moveCost >= 999) {
+          visited[neighbor] = newDistance;
+          if (newDistance <= actualMoveAndFire) {
+            moveAndFireHexes.add(neighbor);
+          } else if (newDistance <= actualMoveOnly) {
+            moveOnlyHexes.add(neighbor);
+          }
+          continue; // Don't add to queue - movement stops here
+        }
+
+        visited[neighbor] = newDistance;
+
+        // Add to move_and_fire if within range
+        if (newDistance <= actualMoveAndFire) {
+          moveAndFireHexes.add(neighbor);
+          queue.add((neighbor, newDistance));
+        }
+        // Add to move_only if within that range
+        else if (newDistance <= actualMoveOnly) {
+          moveOnlyHexes.add(neighbor);
+          queue.add((neighbor, newDistance));
+        }
+      }
+    }
+  }
+
+  /// Calculate attack ranges for a selected unit
+  /// Maps enemy hex positions to expected damage values
+  void calculateAttackRange(SimpleGameUnit unit) {
+    attackRangeHexes.clear();
+
+    final attackRange = _getUnitAttackRange(unit.unitType);
+    final baseDamage = _getUnitBaseDamage(unit.unitType);
+
+    // Find all enemy units within attack range
+    for (final targetUnit in simpleUnits) {
+      if (targetUnit.owner != unit.owner) {
+        final distance = unit.position.distanceTo(targetUnit.position);
+        if (distance <= attackRange) {
+          // Calculate expected damage at this distance
+          final damage = _calculateExpectedDamage(unit, targetUnit, distance);
+          attackRangeHexes[targetUnit.position] = damage;
+        }
+      }
+    }
+  }
+
+  /// Get unit attack range
+  int _getUnitAttackRange(String unitType) {
+    switch (unitType) {
+      // WWII unit types
+      case 'infantry': return 3;
+      case 'armor': return 2;
+      case 'artillery': return 6;
+      // CHEXX unit types
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  /// Get base damage for unit type
+  int _getUnitBaseDamage(String unitType) {
+    switch (unitType) {
+      // WWII unit types
+      case 'infantry': return 2; // Average of [3, 2, 1]
+      case 'armor': return 3; // Average of [3, 3, 3]
+      case 'artillery': return 2; // Average of [3, 3, 2, 2, 1, 1]
+      // CHEXX unit types
+      case 'minor': return 1;
+      case 'scout': return 1;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  /// Calculate expected damage for an attack
+  int _calculateExpectedDamage(SimpleGameUnit attacker, SimpleGameUnit defender, int distance) {
+    // For now, return base damage
+    // Could be enhanced to factor in distance, terrain, etc.
+    return _getUnitBaseDamage(attacker.unitType);
+  }
+
+  /// Get adjacent hexes to a given hex
+  List<core_hex.HexCoordinate> _getAdjacentHexes(core_hex.HexCoordinate hex) {
+    return [
+      core_hex.HexCoordinate(hex.q + 1, hex.r - 1, hex.s),
+      core_hex.HexCoordinate(hex.q + 1, hex.r, hex.s - 1),
+      core_hex.HexCoordinate(hex.q, hex.r + 1, hex.s - 1),
+      core_hex.HexCoordinate(hex.q - 1, hex.r + 1, hex.s),
+      core_hex.HexCoordinate(hex.q - 1, hex.r, hex.s + 1),
+      core_hex.HexCoordinate(hex.q, hex.r - 1, hex.s + 1),
+    ];
+  }
+
+  /// Check if a hex is passable for a unit
+  /// Returns movement cost (0 = impassable, 1+ = passable with cost)
+  int _getHexMovementCost(core_hex.HexCoordinate hex, SimpleGameUnit unit, core_hex.HexCoordinate? fromHex) {
+    // Check if another unit occupies this hex
+    for (final otherUnit in simpleUnits) {
+      if (otherUnit.position == hex && otherUnit != unit) {
+        return 0; // Occupied by another unit - impassable
+      }
+    }
+
+    // Find the tile
+    HexTile? targetTile;
+    for (final tile in board.allTiles) {
+      if (tile.coordinate.q == hex.q &&
+          tile.coordinate.r == hex.r &&
+          tile.coordinate.s == hex.s) {
+        targetTile = tile;
+        break;
+      }
+    }
+
+    if (targetTile == null) return 0; // Hex doesn't exist
+
+    // Check tile type restrictions
+    final tileType = targetTile.type.name.toLowerCase();
+
+    // Ocean: Cannot move into unless already in ocean
+    if (tileType == 'ocean') {
+      bool unitInOcean = false;
+      for (final tile in board.allTiles) {
+        if (tile.coordinate.q == unit.position.q &&
+            tile.coordinate.r == unit.position.r &&
+            tile.coordinate.s == unit.position.s &&
+            tile.type.name.toLowerCase() == 'ocean') {
+          unitInOcean = true;
+          break;
+        }
+      }
+      if (!unitInOcean) return 0; // Can't enter ocean from land
+    }
+
+    // Hedgerow: Can only enter if starting adjacent
+    if (tileType == 'hedgerow') {
+      if (fromHex == null) return 1; // Starting in hedgerow is ok
+
+      bool startedAdjacentToHedgerow = false;
+      final adjacentToStart = _getAdjacentHexes(unit.position);
+      for (final adjHex in adjacentToStart) {
+        for (final tile in board.allTiles) {
+          if (tile.coordinate.q == adjHex.q &&
+              tile.coordinate.r == adjHex.r &&
+              tile.coordinate.s == adjHex.s &&
+              tile.type.name.toLowerCase() == 'hedgerow') {
+            startedAdjacentToHedgerow = true;
+            break;
+          }
+        }
+        if (startedAdjacentToHedgerow) break;
+      }
+      if (!startedAdjacentToHedgerow) return 0; // Can't enter hedgerow
+    }
+
+    // Check structure restrictions
+    for (final structure in placedStructures) {
+      if (structure.position.q == hex.q &&
+          structure.position.r == hex.r &&
+          structure.position.s == hex.s) {
+
+        final structureType = structure.type.name.toLowerCase();
+
+        // Dragon's Teeth: Tanks cannot enter
+        if (structureType == 'dragonsteeth' || structureType == 'dragons_teeth') {
+          if (unit.unitType.toLowerCase() == 'armor') {
+            return 0; // Tanks blocked by Dragon's Teeth
+          }
+        }
+
+        // Barbwire: Must stop movement
+        if (structureType == 'barbwire' || structureType == 'barbed_wire') {
+          return 999; // Special cost to indicate "stop here"
+        }
+      }
+    }
+
+    // Hill: costs 1 movement
+    if (tileType == 'hill') {
+      return 1;
+    }
+
+    // Default movement cost
+    return 1;
+  }
+
+  /// Check if a hex is passable for a unit (legacy wrapper)
+  bool _isHexPassable(core_hex.HexCoordinate hex, SimpleGameUnit unit) {
+    return _getHexMovementCost(hex, unit, null) > 0;
+  }
+
   // Helper methods for unit stats
   String _getUnitDisplayName(String unitType) {
-    print('DEBUG: _getUnitDisplayName - Unit type: "$unitType"');
 
     switch (unitType.toLowerCase()) {
       // CHEXX unit types
@@ -680,6 +977,40 @@ class ChexxGameState extends GameStateBase {
       case 'scout': return 3;
       case 'knight': return 2;
       case 'guardian': return 1;
+      // For WWII units, return the move_only value as default movement
+      case 'infantry': return 2;
+      case 'armor': return 3;
+      case 'artillery': return 1;
+      default: return 1;
+    }
+  }
+
+  /// Get move_and_fire value for unit type (how far unit can move and still attack)
+  int _getUnitMoveAndFire(String unitType) {
+    switch (unitType) {
+      case 'infantry': return 1;
+      case 'armor': return 3;
+      case 'artillery': return 0;
+      // CHEXX units use same value as movement
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
+      default: return 1;
+    }
+  }
+
+  /// Get move_only value for unit type (how far unit can move without attacking)
+  int _getUnitMoveOnly(String unitType) {
+    switch (unitType) {
+      case 'infantry': return 2;
+      case 'armor': return 3;
+      case 'artillery': return 1;
+      // CHEXX units use same value as movement
+      case 'minor': return 1;
+      case 'scout': return 3;
+      case 'knight': return 2;
+      case 'guardian': return 1;
       default: return 1;
     }
   }
@@ -688,16 +1019,6 @@ class ChexxGameState extends GameStateBase {
     switch (unitType) {
       case 'minor': return 1;
       case 'scout': return 1;
-      case 'knight': return 2;
-      case 'guardian': return 1;
-      default: return 1;
-    }
-  }
-
-  int _getUnitAttackRange(String unitType) {
-    switch (unitType) {
-      case 'minor': return 1;
-      case 'scout': return 3;
       case 'knight': return 2;
       case 'guardian': return 1;
       default: return 1;
@@ -727,6 +1048,7 @@ class ChexxGameState extends GameStateBase {
           health: unit.health,
           maxHealth: unit.maxHealth,
           remainingMovement: _getUnitMovement(unit.unitType),
+          moveAfterCombat: unit.moveAfterCombat,
           isSelected: unit.isSelected,
         );
         simpleUnits[i] = resetUnit;
