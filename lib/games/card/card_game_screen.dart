@@ -336,6 +336,24 @@ class _CardGameScreenState extends State<CardGameScreen> {
     // Play card to f-card engine (moves to inPlay zone and sets hasPlayedCardThisTurn flag)
     cardGameState.playCard(card, destination: f_card.CardZone.inPlay);
 
+    // Clear all hex highlights when card is played
+    if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      chexxState.moveAndFireHexes.clear();
+      chexxState.moveOnlyHexes.clear();
+      chexxState.attackRangeHexes.clear();
+      chexxState.highlightedHexes.clear();
+      chexxState.targetedEnemy = null;
+
+      // Deselect all units
+      for (final unit in chexxState.simpleUnits) {
+        unit.isSelected = false;
+      }
+
+      _chexxGameEngine!.notifyListeners();
+      print('Cleared all hex highlights after playing card');
+    }
+
     setState(() {
       playedCard = card;
       completedActions.clear();
@@ -468,8 +486,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
                       ),
                     ),
                   ),
-                  // Show sub-steps when action is active
-                  if (isActive && action['sub_steps'] != null) ...[
+                  // Show sub-steps when action is active or completed (to show progress)
+                  if ((isActive || isCompleted) && action['sub_steps'] != null) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 24, bottom: 4),
                       child: Column(
@@ -549,6 +567,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
     if (_chexxGameEngine != null) {
       final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
       chexxState.isCardActionActive = true;
+      chexxState.isCardActionUnitLocked = false;
+      chexxState.isWaitingForAfterCombatMovement = false;
 
       // Clear wayfinding highlights when action is clicked
       chexxState.moveAndFireHexes.clear();
@@ -560,10 +580,41 @@ class _CardGameScreenState extends State<CardGameScreen> {
       };
 
       chexxState.onUnitMoved = () {
+        // Check if movement was already completed
+        final action = playedCard.card.actions![actionIndex];
+        final subSteps = action['sub_steps'] as List?;
+        if (subSteps != null) {
+          final movementStepIndex = subSteps.indexWhere((step) => step == 'before_combat_movement');
+          final completedSteps = actionCompletedSubSteps[actionIndex] ?? {};
+          if (movementStepIndex != -1 && completedSteps.contains(movementStepIndex)) {
+            print('Movement already completed - cannot move again before combat');
+            return;
+          }
+        }
+
         _advanceSubStep(actionIndex, 'before_combat_movement');
+        // Lock the unit after movement - combat must use same unit
+        chexxState.isCardActionUnitLocked = true;
+        // Clear wayfinding to prevent further movement before combat
+        chexxState.moveAndFireHexes.clear();
+        chexxState.moveOnlyHexes.clear();
+        print('Unit locked after movement - combat must use same unit');
       };
 
       chexxState.onCombatOccurred = () {
+        // If unit didn't move before combat, auto-complete movement sub-step
+        final action = playedCard.card.actions![actionIndex];
+        final subSteps = action['sub_steps'] as List?;
+        if (subSteps != null) {
+          final movementStepIndex = subSteps.indexWhere((step) => step == 'before_combat_movement');
+          final completedSteps = actionCompletedSubSteps[actionIndex] ?? {};
+          if (movementStepIndex != -1 && !completedSteps.contains(movementStepIndex)) {
+            print('Unit attacked without moving - auto-completing before_combat_movement');
+            _advanceSubStep(actionIndex, 'before_combat_movement');
+            // Lock the unit - must use same unit for after-combat movement
+            chexxState.isCardActionUnitLocked = true;
+          }
+        }
         _advanceSubStep(actionIndex, 'combat');
       };
 
@@ -571,11 +622,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
         _advanceSubStep(actionIndex, 'after_combat_movement');
       };
 
-      // Set callback to complete action when unit is ordered
-      chexxState.onUnitOrdered = () {
-        print('DEBUG: Unit ordered - completing action $activeActionIndex');
-        _completeAction(activeActionIndex!);
-      };
+      // Don't auto-complete action - let player complete it manually or when all sub-steps are done
 
       // Highlight all hexes with current player's units
       final currentPlayer = chexxState.currentPlayer;
@@ -630,6 +677,12 @@ class _CardGameScreenState extends State<CardGameScreen> {
       }
 
       print('Sub-step completed: $subStepName (index $subStepIndex), next: ${actionCurrentSubStep[actionIndex]}');
+
+      // Check if all sub-steps are complete
+      if (completedSteps.length >= subSteps.length) {
+        print('All sub-steps complete for action $actionIndex');
+        _completeAction(actionIndex);
+      }
     });
   }
 
@@ -646,7 +699,9 @@ class _CardGameScreenState extends State<CardGameScreen> {
         final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
         chexxState.isCardActionActive = false;
         chexxState.highlightedHexes.clear();
-        chexxState.onUnitOrdered = null;
+        chexxState.activeCardActionUnitId = null;
+        chexxState.isCardActionUnitLocked = false;
+        chexxState.isWaitingForAfterCombatMovement = false;
         // Clear sub-step callbacks
         chexxState.onUnitSelected = null;
         chexxState.onUnitMoved = null;
@@ -658,21 +713,9 @@ class _CardGameScreenState extends State<CardGameScreen> {
       // Check if all actions are complete
       final totalActions = playedCard.card.actions?.length ?? 0;
       if (completedActions.length >= totalActions) {
-        // All actions complete - move card from inPlay to discard
-        cardGameState.moveCardFromPlay(playedCard, f_card.CardZone.discard);
-        playedCard = null;
-        completedActions.clear();
-        allActionsComplete = true; // Signal that turn is ready to end
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Card completed and discarded'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(top: 80, left: 20, right: 20),
-          ),
-        );
+        // All actions complete - mark as ready but keep card visible until END TURN
+        allActionsComplete = true;
+        print('All card actions complete - card will remain visible until END TURN');
       }
     });
   }
@@ -853,6 +896,10 @@ class _CardGameScreenState extends State<CardGameScreen> {
         );
         return;
       }
+
+      // Discard the completed card now
+      cardGameState.moveCardFromPlay(playedCard, f_card.CardZone.discard);
+      print('Card discarded: ${playedCard.card.name}');
     }
 
     // End turn in f-card engine (checks if card was played)

@@ -30,6 +30,11 @@ class ChexxGameEngine extends GameEngineBase {
 
   int _getUnitAttackRange(String unitType) {
     switch (unitType) {
+      // WWII unit types
+      case 'infantry': return 3;
+      case 'armor': return 2;
+      case 'artillery': return 6;
+      // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 3;
       case 'knight': return 2;
@@ -40,6 +45,11 @@ class ChexxGameEngine extends GameEngineBase {
 
   int _getUnitAttackDamage(String unitType) {
     switch (unitType) {
+      // WWII unit types
+      case 'infantry': return 2;
+      case 'armor': return 3;
+      case 'artillery': return 2;
+      // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 1;
       case 'knight': return 2;
@@ -131,6 +141,45 @@ class ChexxGameEngine extends GameEngineBase {
     if (unitAtPosition != null) {
       // Select unit if it belongs to current player
       if (unitAtPosition.owner == chexxGameState.currentPlayer) {
+        // In card mode with locked unit, prevent selecting a different unit
+        if (chexxGameState.gameMode == 'card' &&
+            chexxGameState.isCardActionUnitLocked &&
+            chexxGameState.activeCardActionUnitId != null &&
+            chexxGameState.activeCardActionUnitId != unitAtPosition.id) {
+          print('Cannot select different unit - must complete action with unit ${chexxGameState.activeCardActionUnitId}');
+          // Re-select the locked unit instead
+          for (final unit in chexxGameState.simpleUnits) {
+            if (unit.id == chexxGameState.activeCardActionUnitId) {
+              unit.isSelected = true;
+              chexxGameState.calculateWayfinding(unit);
+              chexxGameState.calculateAttackRange(unit);
+              notifyListeners();
+              break;
+            }
+          }
+          return;
+        }
+
+        // Check if we're deselecting a unit that was waiting for after-combat movement
+        if (chexxGameState.gameMode == 'card' && chexxGameState.isWaitingForAfterCombatMovement) {
+          // Find currently selected unit
+          SimpleGameUnit? currentlySelected;
+          for (final unit in chexxGameState.simpleUnits) {
+            if (unit.isSelected) {
+              currentlySelected = unit;
+              break;
+            }
+          }
+          // If selecting a different unit, complete after-combat movement
+          if (currentlySelected != null && currentlySelected.id != unitAtPosition.id) {
+            chexxGameState.isWaitingForAfterCombatMovement = false;
+            if (chexxGameState.onAfterCombatMovement != null) {
+              print('Player chose not to move after combat (selected different unit)');
+              chexxGameState.onAfterCombatMovement!();
+            }
+          }
+        }
+
         // Deselect all units first
         for (final unit in chexxGameState.simpleUnits) {
           unit.isSelected = false;
@@ -143,6 +192,12 @@ class ChexxGameEngine extends GameEngineBase {
         // Select this unit
         unitAtPosition.isSelected = true;
         print('Selected unit: ${unitAtPosition.id}');
+
+        // In card mode, track which unit is performing the action
+        if (chexxGameState.gameMode == 'card' && chexxGameState.isCardActionActive) {
+          chexxGameState.activeCardActionUnitId = unitAtPosition.id;
+          print('Card action: Selected unit ${unitAtPosition.id} for action');
+        }
 
         // Calculate wayfinding for the selected unit
         chexxGameState.calculateWayfinding(unitAtPosition);
@@ -167,21 +222,24 @@ class ChexxGameEngine extends GameEngineBase {
         }
 
         if (selectedUnit != null) {
-          // In card mode, require an active card action AND highlighted hex
+          // In card mode, require an active card action AND correct unit
           if (chexxGameState.gameMode == 'card') {
             if (!chexxGameState.isCardActionActive) {
               print('Cannot attack - play a card action first');
               return;
             }
-            // In card mode, can only attack if unit's hex is highlighted
-            if (!chexxGameState.highlightedHexes.contains(selectedUnit.position)) {
-              print('Cannot attack - unit not in highlighted hex for current action');
+            // In card mode, can only attack if this is the unit performing the action
+            if (chexxGameState.activeCardActionUnitId != null &&
+                chexxGameState.activeCardActionUnitId != selectedUnit.id) {
+              print('Cannot attack - must use the unit performing the card action');
               return;
             }
           }
 
           final distance = selectedUnit.position.distanceTo(hexCoord);
           final attackRange = _getUnitAttackRange(selectedUnit.unitType);
+
+          print('DEBUG: Attack validation - Unit: ${selectedUnit.unitType}, Distance: $distance, Attack Range: $attackRange');
 
           if (distance <= attackRange) {
             // Two-click attack system: first click targets, second click confirms
@@ -215,6 +273,7 @@ class ChexxGameEngine extends GameEngineBase {
               }
 
               // Notify card game if in card mode (combat occurred)
+              bool enemyKilled = newHealth <= 0;
               if (chexxGameState.gameMode == 'card' && chexxGameState.onCombatOccurred != null) {
                 chexxGameState.onCombatOccurred!();
               }
@@ -228,18 +287,19 @@ class ChexxGameEngine extends GameEngineBase {
                 chexxGameState.simpleUnits.remove(unitAtPosition);
                 print('${unitAtPosition.unitType} destroyed!');
 
-                // Combat movement (overrun): Tanks and Infantry can move into the hex
-                if (selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry') {
+                // Combat movement: Infantry and Armor gain movement points but don't auto-move
+                // ONLY if the killed enemy was adjacent (distance 1)
+                if ((selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry') && distance == 1) {
                   // Calculate move_after_combat: base value + bonus from card action
                   final moveAfterCombat = selectedUnit.moveAfterCombat +
                                          (chexxGameState.unitMoveAfterCombatBonus[selectedUnit.id] ?? 0);
 
-                  // Move attacking unit to the now-empty hex with additional movement if applicable
+                  // Give unit additional movement points without moving it
                   final updatedAttacker = SimpleGameUnit(
                     id: selectedUnit.id,
                     unitType: selectedUnit.unitType,
                     owner: selectedUnit.owner,
-                    position: destroyedPosition,
+                    position: selectedUnit.position, // Keep in current position
                     health: selectedUnit.health,
                     maxHealth: selectedUnit.maxHealth,
                     remainingMovement: selectedUnit.remainingMovement + moveAfterCombat,
@@ -253,14 +313,7 @@ class ChexxGameEngine extends GameEngineBase {
                   }
 
                   if (moveAfterCombat > 0) {
-                    print('${selectedUnit.unitType} moves into conquered hex (combat movement) and gains $moveAfterCombat additional movement');
-                  } else {
-                    print('${selectedUnit.unitType} moves into conquered hex (combat movement)');
-                  }
-
-                  // Notify card game if in card mode (after combat movement)
-                  if (chexxGameState.gameMode == 'card' && chexxGameState.onAfterCombatMovement != null) {
-                    chexxGameState.onAfterCombatMovement!();
+                    print('${selectedUnit.unitType} can now move (gained $moveAfterCombat movement)');
                   }
 
                   // If tank, enable special attack (if not already used this turn)
@@ -271,8 +324,20 @@ class ChexxGameEngine extends GameEngineBase {
                     }
                   }
 
-                  // Recalculate attack range for new position (but not wayfinding during card actions)
+                  // Recalculate wayfinding to show where unit can move after combat
+                  chexxGameState.calculateWayfinding(updatedAttacker);
                   chexxGameState.calculateAttackRange(updatedAttacker);
+
+                  // Set flag to track that we're waiting for after-combat movement decision
+                  if (chexxGameState.gameMode == 'card') {
+                    chexxGameState.isWaitingForAfterCombatMovement = true;
+                    print('After-combat movement available! (Adjacent enemy killed at distance 1)');
+                    print('Waiting for player to decide on after-combat movement...');
+                  }
+
+                  // Note: after_combat_movement sub-step will complete when:
+                  // 1. Player moves the unit (onUnitMoved callback)
+                  // 2. Player deselects the unit without moving (handled below)
                 }
               } else {
                 // Update damaged unit
@@ -298,10 +363,26 @@ class ChexxGameEngine extends GameEngineBase {
               // Clear attack range highlights after attacking
               chexxGameState.attackRangeHexes.clear();
 
-              // Notify card game if in card mode (action completed)
-              if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitOrdered != null) {
-                chexxGameState.onUnitOrdered!();
+              // Auto-complete after_combat_movement sub-step if not applicable
+              // Conditions: enemy not killed, wrong unit type, or enemy killed at distance > 1
+              final canAfterCombatMove = enemyKilled &&
+                                         (selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry') &&
+                                         distance == 1;
+
+              if (!canAfterCombatMove) {
+                if (chexxGameState.gameMode == 'card' && chexxGameState.onAfterCombatMovement != null) {
+                  if (enemyKilled && distance > 1) {
+                    print('Enemy killed at distance $distance - no after-combat movement (only works at distance 1)');
+                  } else if (!enemyKilled) {
+                    print('Enemy survived - no after-combat movement');
+                  } else {
+                    print('Unit type does not support after-combat movement');
+                  }
+                  chexxGameState.onAfterCombatMovement!();
+                }
               }
+
+              // Don't complete the action yet - let sub-step tracking handle it
             } else {
               // First click on enemy - target it for attack
               chexxGameState.targetedEnemy = unitAtPosition;
@@ -326,16 +407,42 @@ class ChexxGameEngine extends GameEngineBase {
         }
       }
 
+      // If clicking on unreachable hex while waiting for after-combat movement, complete it
+      if (selectedUnit != null &&
+          chexxGameState.gameMode == 'card' &&
+          chexxGameState.isWaitingForAfterCombatMovement) {
+        final isInMoveAndFire = chexxGameState.moveAndFireHexes.contains(hexCoord);
+        final isInMoveOnly = chexxGameState.moveOnlyHexes.contains(hexCoord);
+
+        if (!isInMoveAndFire && !isInMoveOnly) {
+          // Clicking on unreachable hex - player chose not to move after combat
+          chexxGameState.isWaitingForAfterCombatMovement = false;
+          if (chexxGameState.onAfterCombatMovement != null) {
+            print('Player chose not to move after combat (clicked elsewhere)');
+            chexxGameState.onAfterCombatMovement!();
+          }
+          notifyListeners();
+          return; // Don't try to move
+        }
+      }
+
       if (selectedUnit != null) {
-        // In card mode, require an active card action AND highlighted hex
+        // In card mode, require an active card action AND correct unit
         if (chexxGameState.gameMode == 'card') {
           if (!chexxGameState.isCardActionActive) {
             print('Cannot move - play a card action first');
             return;
           }
-          // In card mode, can only move if unit's hex is highlighted
-          if (!chexxGameState.highlightedHexes.contains(selectedUnit.position)) {
-            print('Cannot move - unit not in highlighted hex for current action');
+          // In card mode, can only move if this is the unit performing the action
+          if (chexxGameState.activeCardActionUnitId != null &&
+              chexxGameState.activeCardActionUnitId != selectedUnit.id) {
+            print('Cannot move - must use the unit performing the card action');
+            return;
+          }
+          // If unit is locked (after movement), only allow after-combat movement
+          if (chexxGameState.isCardActionUnitLocked &&
+              !chexxGameState.isWaitingForAfterCombatMovement) {
+            print('Cannot move - unit already moved. Must attack before moving again.');
             return;
           }
         }
@@ -376,8 +483,17 @@ class ChexxGameEngine extends GameEngineBase {
           chexxGameState.calculateAttackRange(updatedUnit);
 
           // Notify card game if in card mode (unit moved)
-          if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitMoved != null) {
-            chexxGameState.onUnitMoved!();
+          if (chexxGameState.gameMode == 'card') {
+            // If we were waiting for after-combat movement, complete that instead of regular movement
+            if (chexxGameState.isWaitingForAfterCombatMovement) {
+              chexxGameState.isWaitingForAfterCombatMovement = false;
+              if (chexxGameState.onAfterCombatMovement != null) {
+                print('Player chose to move after combat');
+                chexxGameState.onAfterCombatMovement!();
+              }
+            } else if (chexxGameState.onUnitMoved != null) {
+              chexxGameState.onUnitMoved!();
+            }
           }
 
           // Don't complete action after movement - allow unit to attack first
@@ -471,20 +587,30 @@ class ChexxGameEngine extends GameEngineBase {
   }
 
   bool _isValidAttack(SimpleGameUnit attacker, SimpleGameUnit target) {
-    // Simple attack validation - adjacent hexes only for now
+    // Attack validation using proper attack range
     final distance = attacker.position.distanceTo(target.position);
-    return distance <= 1 && attacker.owner != target.owner;
+    final attackRange = _getUnitAttackRange(attacker.unitType);
+    return distance <= attackRange && attacker.owner != target.owner;
   }
 
   /// Perform dice-based attack using WWII combat system
   (int, List<DieFace>) _performDiceBasedAttack(SimpleGameUnit attacker, SimpleGameUnit defender) {
-    // Load die faces configuration - for now, use a simplified version
-    // In a real implementation, this would be cached
-    final diceConfig = _getDefaultDiceConfig();
+    // Calculate distance for attack_damage array indexing
+    final distance = attacker.position.distanceTo(defender.position);
 
-    // Calculate number of dice to roll based on attacker damage
-    final baseDamage = _getUnitAttackDamage(attacker.unitType);
-    final numDice = baseDamage;
+    // Get attack_damage array from unit type config
+    final attackDamageArray = _getAttackDamageArray(attacker.unitType);
+
+    // Use distance - 1 as index (distance 1 = index 0, distance 2 = index 1, etc.)
+    final arrayIndex = (distance - 1).clamp(0, attackDamageArray.length - 1);
+    final baseDice = attackDamageArray[arrayIndex];
+
+    // TODO: Apply modifiers from tile type, structures, and card bonuses
+    // For now, just use base dice count
+    final numDice = baseDice;
+
+    print('DEBUG: ${attacker.unitType} attacking at distance $distance');
+    print('DEBUG: attack_damage array: $attackDamageArray, index: $arrayIndex, dice: $numDice');
 
     // Roll dice
     final diceRolls = <DieFace>[];
@@ -499,9 +625,27 @@ class ChexxGameEngine extends GameEngineBase {
       // Calculate damage based on die face type
       final damage = _calculateDamageFromDieFace(dieFace, defender);
       totalDamage += damage;
+      print('DEBUG: Die ${i+1}: rolled $roll -> ${dieFace.symbol} (${dieFace.unitType}) = $damage damage');
     }
 
+    print('DEBUG: Total: ${diceRolls.length} dice rolled, $totalDamage total damage');
+
     return (totalDamage, diceRolls);
+  }
+
+  /// Get attack damage array for unit type from config
+  List<int> _getAttackDamageArray(String unitType) {
+    switch (unitType) {
+      case 'infantry':
+        return [3, 2, 1]; // Distance 1, 2, 3
+      case 'armor':
+        return [3, 3, 3]; // Distance 1, 2 (max range 2, but array has 3 for safety)
+      case 'artillery':
+        return [3, 3, 2, 2, 1, 1]; // Distance 1-6
+      // CHEXX units (fallback)
+      default:
+        return [1]; // 1 die at any range
+    }
   }
 
   /// Get default dice configuration (simplified version)
@@ -524,21 +668,34 @@ class ChexxGameEngine extends GameEngineBase {
 
   /// Calculate damage from a die face result
   int _calculateDamageFromDieFace(DieFace dieFace, SimpleGameUnit defender) {
-    // Base damage based on die face type
-    switch (dieFace.unitType) {
-      case 'infantry':
-        return 1;
-      case 'armor':
-        return 2;
-      case 'grenade':
-        return 3;
-      case 'star':
-        return 2;
-      case 'retreat':
-        return 0; // Retreat does no damage
-      default:
-        return 1;
+    // Die damage rules:
+    // 1. Grenade = 1 damage (always)
+    // 2. Die face matches defender's unit type = 1 damage
+    // 3. Retreat = 0 damage (defender must move - to be implemented)
+    // 4. Star = check for special card rules, otherwise 0 damage (TODO: implement card special rules)
+    // 5. Other = 0 damage
+
+    if (dieFace.unitType == 'grenade') {
+      return 1; // Grenade always does 1 damage
     }
+
+    if (dieFace.unitType == defender.unitType) {
+      return 1; // Die face matches defender type = 1 damage
+    }
+
+    if (dieFace.unitType == 'retreat') {
+      // TODO: Implement retreat - defender must move to adjacent hex
+      return 0;
+    }
+
+    if (dieFace.unitType == 'star') {
+      // TODO: Check for special die rules from card played
+      // If no special rules, 0 damage
+      return 0;
+    }
+
+    // All other die faces do 0 damage
+    return 0;
   }
 
   // Note: toggleHexOrientation is now handled by gameState.toggleHexOrientation()

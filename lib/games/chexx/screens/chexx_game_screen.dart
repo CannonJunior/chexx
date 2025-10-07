@@ -834,6 +834,8 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     final diceRolls = gameState.lastDiceRolls!;
     final result = gameState.lastCombatResult ?? '';
 
+    print('DEBUG DISPLAY: Showing ${diceRolls.length} dice: ${diceRolls.map((d) => d.symbol).join(", ")}');
+
     return Container(
       width: 200,
       padding: const EdgeInsets.all(12),

@@ -86,6 +86,12 @@ class ChexxGameState extends GameStateBase {
   // Card mode: hexes that should be highlighted for current action
   Set<core_hex.HexCoordinate> highlightedHexes = {};
 
+  // Card mode: track which unit is performing the current card action
+  String? activeCardActionUnitId;
+
+  // Card mode: lock the unit after movement so combat must use same unit
+  bool isCardActionUnitLocked = false;
+
   // Card mode: callback when unit is ordered (for completing card actions)
   void Function()? onUnitOrdered;
 
@@ -94,6 +100,9 @@ class ChexxGameState extends GameStateBase {
   void Function()? onUnitMoved;
   void Function()? onCombatOccurred;
   void Function()? onAfterCombatMovement;
+
+  // Card mode: track if we're waiting for after-combat movement decision
+  bool isWaitingForAfterCombatMovement = false;
 
   // Wayfinding: hexes reachable with move_and_fire (green)
   Set<core_hex.HexCoordinate> moveAndFireHexes = {};
