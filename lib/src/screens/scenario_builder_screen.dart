@@ -189,15 +189,24 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       return template.type.toString().split('.').last;
     }
 
-    // Look through the current unit type set to find the original ID
+    // First, try to extract the unit type ID directly from template.id
+    // Template IDs are formatted as 'p1_unitTypeId' or 'p2_unitTypeId'
     for (final unitTypeId in currentUnitTypeSet!.unitTypeIds) {
-      final mappedType = _stringToUnitType(unitTypeId);
-      if (mappedType == template.type && template.id.contains(unitTypeId)) {
+      if (template.id.contains(unitTypeId)) {
+        // Found the unit type ID in the template ID
         return unitTypeId;
       }
     }
 
-    // Fallback to enum name
+    // Fallback: Look through the current unit type set to find matching type
+    for (final unitTypeId in currentUnitTypeSet!.unitTypeIds) {
+      final mappedType = _stringToUnitType(unitTypeId);
+      if (mappedType == template.type) {
+        return unitTypeId;
+      }
+    }
+
+    // Final fallback to enum name
     return template.type.toString().split('.').last;
   }
 
@@ -1826,11 +1835,33 @@ class ScenarioBuilderPainter extends CustomPainter {
       final center = _hexToScreen(placedUnit.position, centerX, centerY);
       final radius = hexSize * 0.4;
 
+      // Check if unit is incrementable
+      final isIncrementable = widgetState._getActualIsIncrementable(placedUnit.template);
+      final health = widgetState._getCurrentHealth(placedUnit);
+
       // Unit colors
       final baseColor = placedUnit.template.owner == Player.player1
           ? Colors.blue.shade600
           : Colors.red.shade600;
 
+      if (isIncrementable && health <= 6) {
+        // Draw multiple icons based on health (1-6)
+        _drawMultipleIconsForUnit(canvas, center, radius, baseColor, health, placedUnit.template);
+      } else if (isIncrementable && health > 6) {
+        // Draw single icon with health number for health > 6
+        _drawSingleIconWithNumber(canvas, center, radius, baseColor, health, placedUnit.template);
+      } else {
+        // Draw standard unit (non-incrementable)
+        _drawStandardUnit(canvas, center, radius, baseColor, placedUnit.template);
+      }
+    }
+  }
+
+  void _drawMultipleIconsForUnit(Canvas canvas, Offset center, double radius, Color baseColor, int health, UnitTemplate template) {
+    final iconRadius = radius * 0.6; // Smaller icons when multiple
+    final positions = _calculateIconPositions(center, health, iconRadius);
+
+    for (final position in positions) {
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
         ..color = baseColor;
@@ -1840,17 +1871,16 @@ class ScenarioBuilderPainter extends CustomPainter {
         ..strokeWidth = 2.0
         ..color = Colors.black87;
 
-      // Draw unit circle
-      canvas.drawCircle(center, radius, fillPaint);
-      canvas.drawCircle(center, radius, strokePaint);
+      canvas.drawCircle(position, iconRadius, fillPaint);
+      canvas.drawCircle(position, iconRadius, strokePaint);
 
-      // Draw unit type symbol
+      // Draw unit symbol on each icon
       final textPainter = TextPainter(
         text: TextSpan(
-          text: widgetState._getActualUnitSymbol(placedUnit.template),
+          text: widgetState._getActualUnitSymbol(template),
           style: TextStyle(
             color: Colors.white,
-            fontSize: hexSize * 0.3,
+            fontSize: iconRadius * 0.8,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1860,16 +1890,120 @@ class ScenarioBuilderPainter extends CustomPainter {
       textPainter.paint(
         canvas,
         Offset(
-          center.dx - textPainter.width / 2,
-          center.dy - textPainter.height / 2,
+          position.dx - textPainter.width / 2,
+          position.dy - textPainter.height / 2,
         ),
       );
-
-      // Draw health indicators for incrementable units
-      if (placedUnit.customHealth != null && placedUnit.customHealth! > 1) {
-        _drawHealthIndicators(canvas, center, placedUnit.customHealth!);
-      }
     }
+  }
+
+  void _drawSingleIconWithNumber(Canvas canvas, Offset center, double radius, Color baseColor, int health, UnitTemplate template) {
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = baseColor;
+
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..color = Colors.black87;
+
+    canvas.drawCircle(center, radius, fillPaint);
+    canvas.drawCircle(center, radius, strokePaint);
+
+    // Draw health number
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: health.toString(),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: radius * 0.8,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      ),
+    );
+  }
+
+  void _drawStandardUnit(Canvas canvas, Offset center, double radius, Color baseColor, UnitTemplate template) {
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = baseColor;
+
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..color = Colors.black87;
+
+    // Draw unit circle
+    canvas.drawCircle(center, radius, fillPaint);
+    canvas.drawCircle(center, radius, strokePaint);
+
+    // Draw unit type symbol
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: widgetState._getActualUnitSymbol(template),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: hexSize * 0.3,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      ),
+    );
+  }
+
+  List<Offset> _calculateIconPositions(Offset center, int count, double iconRadius) {
+    List<Offset> positions = [];
+
+    // Increased spacing multiplier for better visual separation (matching game mode)
+    final spacing = iconRadius * 1.5;
+
+    if (count == 1) {
+      positions.add(center);
+    } else if (count == 2) {
+      positions.add(Offset(center.dx - spacing, center.dy));
+      positions.add(Offset(center.dx + spacing, center.dy));
+    } else if (count == 3) {
+      positions.add(Offset(center.dx, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing * 0.6));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing * 0.6));
+    } else if (count == 4) {
+      positions.add(Offset(center.dx - spacing, center.dy - spacing));
+      positions.add(Offset(center.dx + spacing, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing));
+    } else if (count == 5) {
+      positions.add(Offset(center.dx, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy - spacing * 0.3));
+      positions.add(Offset(center.dx + spacing, center.dy - spacing * 0.3));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing));
+    } else if (count == 6) {
+      positions.add(Offset(center.dx - spacing, center.dy - spacing));
+      positions.add(Offset(center.dx, center.dy - spacing));
+      positions.add(Offset(center.dx + spacing, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing));
+      positions.add(Offset(center.dx, center.dy + spacing));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing));
+    }
+
+    return positions;
   }
 
   /// Draw health indicators as small dots around the unit

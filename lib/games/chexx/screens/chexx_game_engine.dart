@@ -1015,33 +1015,36 @@ class ChexxGamePainter extends CustomPainter {
   List<Offset> _calculateIconPositions(Offset center, int count, double iconRadius) {
     List<Offset> positions = [];
 
+    // Increased spacing multiplier for better visual separation
+    final spacing = iconRadius * 1.5;
+
     if (count == 1) {
       positions.add(center);
     } else if (count == 2) {
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy));
+      positions.add(Offset(center.dx - spacing, center.dy));
+      positions.add(Offset(center.dx + spacing, center.dy));
     } else if (count == 3) {
-      positions.add(Offset(center.dx, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.5));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.5));
+      positions.add(Offset(center.dx, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing * 0.6));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing * 0.6));
     } else if (count == 4) {
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.8));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx - spacing, center.dy - spacing));
+      positions.add(Offset(center.dx + spacing, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing));
     } else if (count == 5) {
-      positions.add(Offset(center.dx, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy - iconRadius * 0.3));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy - iconRadius * 0.3));
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.8));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy - spacing * 0.3));
+      positions.add(Offset(center.dx + spacing, center.dy - spacing * 0.3));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing));
     } else if (count == 6) {
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy - iconRadius * 0.8));
-      positions.add(Offset(center.dx - iconRadius * 0.8, center.dy + iconRadius * 0.8));
-      positions.add(Offset(center.dx, center.dy + iconRadius * 0.8));
-      positions.add(Offset(center.dx + iconRadius * 0.8, center.dy + iconRadius * 0.8));
+      positions.add(Offset(center.dx - spacing, center.dy - spacing));
+      positions.add(Offset(center.dx, center.dy - spacing));
+      positions.add(Offset(center.dx + spacing, center.dy - spacing));
+      positions.add(Offset(center.dx - spacing, center.dy + spacing));
+      positions.add(Offset(center.dx, center.dy + spacing));
+      positions.add(Offset(center.dx + spacing, center.dy + spacing));
     }
 
     return positions;
@@ -1071,6 +1074,11 @@ class ChexxGamePainter extends CustomPainter {
   bool _isUnitIncrementable(String unitType) {
     // Check unit configuration for incrementable property
     switch (unitType) {
+      // WWII units - all incrementable
+      case 'infantry': return true;
+      case 'armor': return true;
+      case 'artillery': return true;
+      // CHEXX units
       case 'minor': return true;
       case 'guardian': return true;
       case 'scout': return false;
@@ -1081,6 +1089,11 @@ class ChexxGamePainter extends CustomPainter {
 
   double _getUnitRadius(String unitType) {
     switch (unitType) {
+      // WWII units
+      case 'infantry': return 16.0;
+      case 'armor': return 20.0;
+      case 'artillery': return 18.0;
+      // CHEXX units
       case 'minor': return 15.0;
       case 'scout': return 18.0;
       case 'knight': return 22.0;
@@ -1091,6 +1104,11 @@ class ChexxGamePainter extends CustomPainter {
 
   Color _getUnitColor(Color baseColor, String unitType) {
     switch (unitType) {
+      // WWII units
+      case 'infantry': return baseColor.withOpacity(0.85);
+      case 'armor': return baseColor; // Full opacity for armor (strongest)
+      case 'artillery': return baseColor.withOpacity(0.75);
+      // CHEXX units
       case 'minor': return baseColor.withOpacity(0.7);
       case 'scout': return baseColor.withOpacity(0.9);
       case 'knight': return baseColor;
