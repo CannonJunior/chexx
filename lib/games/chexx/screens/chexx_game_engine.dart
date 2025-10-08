@@ -258,8 +258,13 @@ class ChexxGameEngine extends GameEngineBase {
               final damage = diceRollResults.$1;
               final diceRolls = diceRollResults.$2;
 
+              // Count retreat dice
+              final retreatDiceCount = diceRolls.where((die) => die.unitType == 'retreat').length;
+
               // Record dice roll results for display
-              final result = '$damage damage dealt';
+              final result = retreatDiceCount > 0
+                  ? '$damage damage dealt, $retreatDiceCount retreat'
+                  : '$damage damage dealt';
               chexxGameState.recordDiceRoll(diceRolls, result);
               final newHealth = (unitAtPosition.health - damage).clamp(0, unitAtPosition.maxHealth).toInt();
 
@@ -358,6 +363,45 @@ class ChexxGameEngine extends GameEngineBase {
                   chexxGameState.simpleUnits[index] = updatedUnit;
                 }
                 print('${unitAtPosition.unitType} health: $newHealth/${unitAtPosition.maxHealth}');
+
+                // Handle retreat if retreat dice were rolled and unit survived
+                if (retreatDiceCount > 0 && newHealth > 0) {
+                  chexxGameState.calculateRetreatHexes(updatedUnit, retreatDiceCount);
+
+                  if (chexxGameState.retreatHexes.isEmpty) {
+                    // No valid retreat hexes - apply 1 damage per retreat die
+                    final retreatDamage = retreatDiceCount;
+                    final finalHealth = (newHealth - retreatDamage).clamp(0, unitAtPosition.maxHealth).toInt();
+
+                    final finalUnit = SimpleGameUnit(
+                      id: updatedUnit.id,
+                      unitType: updatedUnit.unitType,
+                      owner: updatedUnit.owner,
+                      position: updatedUnit.position,
+                      health: finalHealth,
+                      maxHealth: updatedUnit.maxHealth,
+                      remainingMovement: updatedUnit.remainingMovement,
+                      moveAfterCombat: updatedUnit.moveAfterCombat,
+                      isSelected: updatedUnit.isSelected,
+                    );
+
+                    if (index != -1) {
+                      if (finalHealth <= 0) {
+                        chexxGameState.simpleUnits.removeAt(index);
+                        print('${updatedUnit.unitType} destroyed by retreat damage (no valid hexes)!');
+                      } else {
+                        chexxGameState.simpleUnits[index] = finalUnit;
+                        print('${updatedUnit.unitType} takes $retreatDamage retreat damage (no valid hexes)! Health: $finalHealth/${updatedUnit.maxHealth}');
+                      }
+                    }
+                  } else {
+                    // Valid retreat hexes available - wait for player to choose
+                    chexxGameState.unitMustRetreat = updatedUnit;
+                    chexxGameState.retreatDiceCount = retreatDiceCount;
+                    chexxGameState.isWaitingForRetreat = true;
+                    print('${updatedUnit.unitType} must retreat $retreatDiceCount hexes! Click an orange hex to retreat.');
+                  }
+                }
               }
 
               // Clear attack range highlights after attacking
@@ -405,6 +449,35 @@ class ChexxGameEngine extends GameEngineBase {
           selectedUnit = unit;
           break;
         }
+      }
+
+      // Handle retreat hex clicking
+      if (chexxGameState.isWaitingForRetreat && chexxGameState.retreatHexes.contains(hexCoord)) {
+        final retreatingUnit = chexxGameState.unitMustRetreat!;
+
+        // Move unit to retreat hex
+        final retreatedUnit = SimpleGameUnit(
+          id: retreatingUnit.id,
+          unitType: retreatingUnit.unitType,
+          owner: retreatingUnit.owner,
+          position: hexCoord,
+          health: retreatingUnit.health,
+          maxHealth: retreatingUnit.maxHealth,
+          remainingMovement: retreatingUnit.remainingMovement,
+          moveAfterCombat: retreatingUnit.moveAfterCombat,
+          isSelected: retreatingUnit.isSelected,
+        );
+
+        final index = chexxGameState.simpleUnits.indexOf(retreatingUnit);
+        if (index != -1) {
+          chexxGameState.simpleUnits[index] = retreatedUnit;
+          print('${retreatingUnit.unitType} retreated to ${hexCoord.q},${hexCoord.r},${hexCoord.s}');
+        }
+
+        // Clear retreat state
+        chexxGameState.clearRetreatState();
+        notifyListeners();
+        return;
       }
 
       // If clicking on unreachable hex while waiting for after-combat movement, complete it
@@ -804,6 +877,9 @@ class ChexxGamePainter extends CustomPainter {
     // Draw structures
     _drawStructures(canvas, size, gameState);
 
+    // Draw vertical partition lines (if enabled)
+    _drawVerticalLines(canvas, size, gameState);
+
     // Draw units
     _drawUnits(canvas, size, gameState);
   }
@@ -884,6 +960,59 @@ class ChexxGamePainter extends CustomPainter {
             ..color = Colors.yellow.withOpacity(0.37)
             ..style = PaintingStyle.fill;
           canvas.drawPath(path, yellowOverlay);
+        }
+
+        // Retreat: Highlight retreat hexes (orange)
+        if (gameState.retreatHexes.contains(coreCoord)) {
+          final orangeOverlay = Paint()
+            ..color = Colors.orange.withOpacity(0.5)
+            ..style = PaintingStyle.fill;
+          canvas.drawPath(path, orangeOverlay);
+        }
+
+        // Board thirds: Highlight hexes by third membership (when individual third toggles are active)
+        if (gameState.highlightLeftThird || gameState.highlightMiddleThird || gameState.highlightRightThird) {
+          final inLeft = gameState.leftThirdHexes.contains(coreCoord);
+          final inMiddle = gameState.middleThirdHexes.contains(coreCoord);
+          final inRight = gameState.rightThirdHexes.contains(coreCoord);
+
+          // Determine which highlights should be shown
+          final showLeft = gameState.highlightLeftThird && inLeft;
+          final showMiddle = gameState.highlightMiddleThird && inMiddle;
+          final showRight = gameState.highlightRightThird && inRight;
+
+          // Use distinct colors for each third
+          if (showLeft && showMiddle) {
+            // Hex belongs to both left and middle (on boundary) and both are highlighted
+            final boundaryOverlay = Paint()
+              ..color = Colors.purple.withOpacity(0.2)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, boundaryOverlay);
+          } else if (showMiddle && showRight) {
+            // Hex belongs to both middle and right (on boundary) and both are highlighted
+            final boundaryOverlay = Paint()
+              ..color = Colors.orange.withOpacity(0.2)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, boundaryOverlay);
+          } else if (showLeft) {
+            // Hex in left third and left is highlighted
+            final leftOverlay = Paint()
+              ..color = Colors.cyan.withOpacity(0.15)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, leftOverlay);
+          } else if (showMiddle) {
+            // Hex in middle third and middle is highlighted
+            final middleOverlay = Paint()
+              ..color = Colors.yellow.withOpacity(0.15)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, middleOverlay);
+          } else if (showRight) {
+            // Hex in right third and right is highlighted
+            final rightOverlay = Paint()
+              ..color = Colors.pink.withOpacity(0.15)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, rightOverlay);
+          }
         }
 
         // Attack range: Highlight enemy hexes with red, varying alpha by damage
@@ -1386,6 +1515,98 @@ class ChexxGamePainter extends CustomPainter {
       case StructureType.dragonsTeeth:
         return 'T';
     }
+  }
+
+  void _drawVerticalLines(Canvas canvas, Size size, ChexxGameState gameState) {
+    if (!gameState.showVerticalLines) return;
+
+    final hexSize = engine.hexSize;
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+
+    // Convert normalized x-coordinates to screen x-coordinates
+    // The boundaries are stored in normalized space (as if hexSize = 1)
+    // Multiply by hexSize to get actual screen coordinates
+    final leftLineScreenX = centerX + hexSize * gameState.leftLineX;
+    final rightLineScreenX = centerX + hexSize * gameState.rightLineX;
+
+    // Draw vertical lines from top to bottom of canvas
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.7)
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke;
+
+    // Draw left dividing line
+    canvas.drawLine(
+      Offset(leftLineScreenX, 0),
+      Offset(leftLineScreenX, size.height),
+      linePaint,
+    );
+
+    // Draw right dividing line
+    canvas.drawLine(
+      Offset(rightLineScreenX, 0),
+      Offset(rightLineScreenX, size.height),
+      linePaint,
+    );
+
+    // Draw labels for the thirds
+    final labelPaint = TextPainter(
+      textDirection: TextDirection.ltr,
+    );
+
+    // Calculate the leftmost x position (approximate left edge of board)
+    final boardLeftX = centerX + hexSize * gameState.leftLineX - hexSize * (gameState.leftLineX - gameState.leftLineX);
+    // Use a better calculation: find the midpoint between left edge of screen and left line
+    final leftEdgeX = 0.0;
+    final leftThirdCenterX = (leftEdgeX + leftLineScreenX) / 2;
+
+    // Left third label
+    labelPaint.text = TextSpan(
+      text: 'LEFT THIRD',
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.8),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    labelPaint.layout();
+    labelPaint.paint(
+      canvas,
+      Offset(leftThirdCenterX - labelPaint.width / 2, 20),
+    );
+
+    // Middle third label
+    final middleThirdCenterX = (leftLineScreenX + rightLineScreenX) / 2;
+    labelPaint.text = TextSpan(
+      text: 'MIDDLE THIRD',
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.8),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    labelPaint.layout();
+    labelPaint.paint(
+      canvas,
+      Offset(middleThirdCenterX - labelPaint.width / 2, 20),
+    );
+
+    // Right third label
+    final rightThirdCenterX = (rightLineScreenX + size.width) / 2;
+    labelPaint.text = TextSpan(
+      text: 'RIGHT THIRD',
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.8),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    labelPaint.layout();
+    labelPaint.paint(
+      canvas,
+      Offset(rightThirdCenterX - labelPaint.width / 2, 20),
+    );
   }
 
   Color _getStructureColor(StructureType type) {

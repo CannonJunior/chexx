@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:oxygen/oxygen.dart';
 import '../../../core/models/game_state_base.dart';
 import '../../../core/models/hex_coordinate.dart' as core_hex;
@@ -11,7 +12,7 @@ import '../../../core/components/combat_component.dart';
 import '../../../core/components/selection_component.dart';
 import '../../../core/models/game_config.dart';
 import '../../../src/models/game_board.dart';
-import '../../../src/models/hex_coordinate.dart';
+import '../../../src/models/hex_coordinate.dart' as src_hex;
 import '../../../src/models/hex_orientation.dart';
 import '../../../src/models/scenario_builder_state.dart';
 import '../../../src/systems/combat/die_faces_config.dart';
@@ -103,6 +104,23 @@ class ChexxGameState extends GameStateBase {
 
   // Card mode: track if we're waiting for after-combat movement decision
   bool isWaitingForAfterCombatMovement = false;
+
+  // Retreat system: track unit that must retreat and how many retreat dice rolled
+  SimpleGameUnit? unitMustRetreat;
+  int retreatDiceCount = 0;
+  Set<core_hex.HexCoordinate> retreatHexes = {};
+  bool isWaitingForRetreat = false;
+
+  // Board partitioning: divide board into thirds with vertical lines
+  bool showVerticalLines = false;
+  bool highlightLeftThird = false;
+  bool highlightMiddleThird = false;
+  bool highlightRightThird = false;
+  Set<core_hex.HexCoordinate> leftThirdHexes = {};
+  Set<core_hex.HexCoordinate> middleThirdHexes = {};
+  Set<core_hex.HexCoordinate> rightThirdHexes = {};
+  double leftLineX = 0.0;
+  double rightLineX = 0.0;
 
   // Wayfinding: hexes reachable with move_and_fire (green)
   Set<core_hex.HexCoordinate> moveAndFireHexes = {};
@@ -467,7 +485,7 @@ class ChexxGameState extends GameStateBase {
         try {
           final tile = tileData as Map<String, dynamic>;
           // Create board HexCoordinate (src/models version)
-          final coord = HexCoordinate(
+          final coord = src_hex.HexCoordinate(
             tile['q'] as int,
             tile['r'] as int,
             tile['s'] as int,
@@ -567,12 +585,12 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Convert core HexCoordinate to board HexCoordinate
-  HexCoordinate _convertCoreToBoard(core_hex.HexCoordinate coreHex) {
-    return HexCoordinate(coreHex.q, coreHex.r, coreHex.s);
+  src_hex.HexCoordinate _convertCoreToBoard(core_hex.HexCoordinate coreHex) {
+    return src_hex.HexCoordinate(coreHex.q, coreHex.r, coreHex.s);
   }
 
   /// Convert board HexCoordinate to core HexCoordinate
-  core_hex.HexCoordinate _convertBoardToCore(HexCoordinate boardHex) {
+  core_hex.HexCoordinate _convertBoardToCore(src_hex.HexCoordinate boardHex) {
     return core_hex.HexCoordinate(boardHex.q, boardHex.r, boardHex.s);
   }
 
@@ -591,7 +609,7 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Create a unit entity (ECS version - currently disabled)
-  Entity _createUnit(String unitType, Player owner, HexCoordinate position) {
+  Entity _createUnit(String unitType, Player owner, src_hex.HexCoordinate position) {
     final entity = world.createEntity();
     // TODO: Fix ECS component adding when Oxygen 0.3.1 API is clarified
     return entity;
@@ -1085,5 +1103,205 @@ class ChexxGameState extends GameStateBase {
   bool get shouldShowDiceRoll {
     if (lastCombatTime == null) return false;
     return DateTime.now().difference(lastCombatTime!).inSeconds < 5;
+  }
+
+  /// Calculate valid retreat hexes for a unit
+  /// Player 1 units retreat in r direction -1 (backwards)
+  /// Player 2 units retreat in r direction +1 (backwards for them)
+  void calculateRetreatHexes(SimpleGameUnit unit, int retreatCount) {
+    retreatHexes.clear();
+
+    // Determine retreat direction based on player
+    final retreatDirection = unit.owner == Player.player1 ? -1 : 1;
+
+    // Calculate retreat positions (each retreat die = 1 hex in r direction)
+    for (int i = 1; i <= retreatCount; i++) {
+      final retreatCoord = core_hex.HexCoordinate(
+        unit.position.q,
+        unit.position.r + (retreatDirection * i),
+        unit.position.s,
+      );
+
+      // Check if this hex is valid for retreat
+      if (_isValidRetreatHex(unit, retreatCoord)) {
+        retreatHexes.add(retreatCoord);
+      }
+    }
+
+    notifyListeners();
+  }
+
+  /// Check if a hex is valid for retreat
+  bool _isValidRetreatHex(SimpleGameUnit unit, core_hex.HexCoordinate hex) {
+    // Get tile at this position
+    final srcCoord = src_hex.HexCoordinate(hex.q, hex.r, hex.s);
+    final tile = board.tiles[srcCoord];
+
+    if (tile == null) return false;
+
+    // Cannot retreat into ocean
+    if (tile.type == HexType.ocean) {
+      return false;
+    }
+
+    // Armor cannot retreat into Dragon's Teeth
+    if (unit.unitType == 'armor') {
+      // Check if there's a Dragon's Teeth structure at this hex
+      for (final structure in placedStructures) {
+        if (structure.position == hex && structure.type == StructureType.dragonsTeeth) {
+          return false;
+        }
+      }
+    }
+
+    // Check if hex is occupied by another unit
+    for (final otherUnit in simpleUnits) {
+      if (otherUnit.position == hex) {
+        return false; // Cannot retreat into occupied hex
+      }
+    }
+
+    return true;
+  }
+
+  /// Clear retreat state
+  void clearRetreatState() {
+    unitMustRetreat = null;
+    retreatDiceCount = 0;
+    retreatHexes.clear();
+    isWaitingForRetreat = false;
+    notifyListeners();
+  }
+
+  /// Toggle vertical lines display
+  void toggleVerticalLines() {
+    showVerticalLines = !showVerticalLines;
+    if (showVerticalLines) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Toggle left third highlighting
+  void toggleLeftThirdHighlight() {
+    highlightLeftThird = !highlightLeftThird;
+    if (highlightLeftThird && leftThirdHexes.isEmpty) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Toggle middle third highlighting
+  void toggleMiddleThirdHighlight() {
+    highlightMiddleThird = !highlightMiddleThird;
+    if (highlightMiddleThird && middleThirdHexes.isEmpty) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Toggle right third highlighting
+  void toggleRightThirdHighlight() {
+    highlightRightThird = !highlightRightThird;
+    if (highlightRightThird && rightThirdHexes.isEmpty) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Calculate board partitioning into thirds with vertical lines (for POINTY-TOP layout)
+  void calculateBoardThirds() {
+    leftThirdHexes.clear();
+    middleThirdHexes.clear();
+    rightThirdHexes.clear();
+
+    if (board.tiles.isEmpty) return;
+
+    // Calculate x-positions for all hexes using POINTY-TOP formula
+    // x = sqrt(3) * q + sqrt(3)/2 * r
+    double? minX;
+    double? maxX;
+
+    final sqrt3 = sqrt(3.0);
+    final hexPositions = <src_hex.HexCoordinate, double>{};
+
+    for (final tile in board.tiles.values) {
+      final q = tile.coordinate.q.toDouble();
+      final r = tile.coordinate.r.toDouble();
+
+      // Pointy-top x-coordinate (normalized, hexSize = 1)
+      final hexCenterX = sqrt3 * q + (sqrt3 / 2.0) * r;
+      hexPositions[tile.coordinate] = hexCenterX;
+
+      if (minX == null || hexCenterX < minX) minX = hexCenterX;
+      if (maxX == null || hexCenterX > maxX) maxX = hexCenterX;
+    }
+
+    if (minX == null || maxX == null) return;
+
+    // Calculate the range and third boundaries in x-coordinate space
+    final xRange = maxX - minX;
+    final thirdSize = xRange / 3.0;
+
+    // Boundaries in x-coordinate space
+    final leftBoundary = minX + thirdSize;
+    final rightBoundary = minX + (thirdSize * 2);
+
+    print('DEBUG Board Thirds (Pointy): minX=$minX, maxX=$maxX, xRange=$xRange');
+    print('DEBUG Boundaries: left=$leftBoundary, right=$rightBoundary');
+
+    // Categorize each hex into thirds
+    // Hexes near boundaries may belong to multiple thirds
+    for (final tile in board.tiles.values) {
+      final coreCoord = core_hex.HexCoordinate(
+        tile.coordinate.q,
+        tile.coordinate.r,
+        tile.coordinate.s,
+      );
+
+      final hexCenterX = hexPositions[tile.coordinate]!;
+
+      // A hex in pointy-top spans approximately ±(sqrt(3)/2) in x-space
+      final hexHalfWidth = sqrt3 / 2.0;
+      final hexLeftEdgeX = hexCenterX - hexHalfWidth;
+      final hexRightEdgeX = hexCenterX + hexHalfWidth;
+
+      // Determine which third(s) this hex belongs to
+      bool inLeft = hexLeftEdgeX < leftBoundary;
+      bool inRight = hexRightEdgeX > rightBoundary;
+      bool inMiddle = hexRightEdgeX > leftBoundary && hexLeftEdgeX < rightBoundary;
+
+      // A hex can belong to multiple thirds if it straddles a boundary
+      if (inLeft) {
+        leftThirdHexes.add(coreCoord);
+      }
+      if (inMiddle) {
+        middleThirdHexes.add(coreCoord);
+      }
+      if (inRight) {
+        rightThirdHexes.add(coreCoord);
+      }
+    }
+
+    print('DEBUG Thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
+
+    // Store the x-coordinates of the vertical lines for rendering
+    // These are in normalized x-coordinate space (will be multiplied by hexSize during rendering)
+    leftLineX = leftBoundary;
+    rightLineX = rightBoundary;
+  }
+
+  /// Get hexes for a specific third
+  Set<core_hex.HexCoordinate> getHexesForThird(String hexTiles) {
+    switch (hexTiles.toLowerCase()) {
+      case 'left third':
+        return leftThirdHexes;
+      case 'middle third':
+        return middleThirdHexes;
+      case 'right third':
+        return rightThirdHexes;
+      default:
+        return {};
+    }
   }
 }

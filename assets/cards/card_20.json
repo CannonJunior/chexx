@@ -1,11 +1,11 @@
 {
   "id": "card_20",
-  "name": "Card 20",
-  "description": "This is card number 20. Type: special. A powerful card for your deck.",
-  "cost": 9,
-  "type": "special",
+  "name": "Recon in Force",
+  "description": "Order one unit in each section.",
+  "cost": 8,
+  "type": "support",
   "attributes": {
-    "power": 1,
+    "power": 5,
     "rarity": "common"
   },
   "imageAsset": "",
@@ -13,7 +13,29 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name",
+      "hex_tiles": "left third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "middle third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "right third",
       "sub_steps": [
         "unit_selection",
         "before_combat_movement",
