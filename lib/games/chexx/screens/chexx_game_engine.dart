@@ -141,6 +141,18 @@ class ChexxGameEngine extends GameEngineBase {
     if (unitAtPosition != null) {
       // Select unit if it belongs to current player
       if (unitAtPosition.owner == chexxGameState.currentPlayer) {
+        // In card mode with hex_tiles restriction, only allow selecting units in allowed hexes
+        if (chexxGameState.gameMode == 'card' &&
+            chexxGameState.isCardActionActive &&
+            chexxGameState.activeCardActionHexTiles != null &&
+            chexxGameState.activeCardActionHexTiles != 'none') {
+          final allowedHexes = chexxGameState.getHexesForThird(chexxGameState.activeCardActionHexTiles!);
+          if (!allowedHexes.contains(hexCoord)) {
+            print('Cannot select unit - hex_tiles restriction: ${chexxGameState.activeCardActionHexTiles}');
+            return;
+          }
+        }
+
         // In card mode with locked unit, prevent selecting a different unit
         if (chexxGameState.gameMode == 'card' &&
             chexxGameState.isCardActionUnitLocked &&
@@ -968,51 +980,6 @@ class ChexxGamePainter extends CustomPainter {
             ..color = Colors.orange.withOpacity(0.5)
             ..style = PaintingStyle.fill;
           canvas.drawPath(path, orangeOverlay);
-        }
-
-        // Board thirds: Highlight hexes by third membership (when individual third toggles are active)
-        if (gameState.highlightLeftThird || gameState.highlightMiddleThird || gameState.highlightRightThird) {
-          final inLeft = gameState.leftThirdHexes.contains(coreCoord);
-          final inMiddle = gameState.middleThirdHexes.contains(coreCoord);
-          final inRight = gameState.rightThirdHexes.contains(coreCoord);
-
-          // Determine which highlights should be shown
-          final showLeft = gameState.highlightLeftThird && inLeft;
-          final showMiddle = gameState.highlightMiddleThird && inMiddle;
-          final showRight = gameState.highlightRightThird && inRight;
-
-          // Use distinct colors for each third
-          if (showLeft && showMiddle) {
-            // Hex belongs to both left and middle (on boundary) and both are highlighted
-            final boundaryOverlay = Paint()
-              ..color = Colors.purple.withOpacity(0.2)
-              ..style = PaintingStyle.fill;
-            canvas.drawPath(path, boundaryOverlay);
-          } else if (showMiddle && showRight) {
-            // Hex belongs to both middle and right (on boundary) and both are highlighted
-            final boundaryOverlay = Paint()
-              ..color = Colors.orange.withOpacity(0.2)
-              ..style = PaintingStyle.fill;
-            canvas.drawPath(path, boundaryOverlay);
-          } else if (showLeft) {
-            // Hex in left third and left is highlighted
-            final leftOverlay = Paint()
-              ..color = Colors.cyan.withOpacity(0.15)
-              ..style = PaintingStyle.fill;
-            canvas.drawPath(path, leftOverlay);
-          } else if (showMiddle) {
-            // Hex in middle third and middle is highlighted
-            final middleOverlay = Paint()
-              ..color = Colors.yellow.withOpacity(0.15)
-              ..style = PaintingStyle.fill;
-            canvas.drawPath(path, middleOverlay);
-          } else if (showRight) {
-            // Hex in right third and right is highlighted
-            final rightOverlay = Paint()
-              ..color = Colors.pink.withOpacity(0.15)
-              ..style = PaintingStyle.fill;
-            canvas.drawPath(path, rightOverlay);
-          }
         }
 
         // Attack range: Highlight enemy hexes with red, varying alpha by damage

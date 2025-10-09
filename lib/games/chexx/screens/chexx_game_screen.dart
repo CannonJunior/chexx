@@ -318,116 +318,39 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Orientation toggle button
-            Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  print('DEBUG: TOGGLE BUTTON PRESSED - UI Level');
-                  gameState.toggleHexOrientation();
-                },
-                icon: Icon(
-                  gameState.hexOrientation == HexOrientation.flat
-                      ? Icons.hexagon_outlined
-                      : Icons.change_history_outlined,
-                  size: 16,
-                ),
-                label: Text(
-                  gameState.hexOrientation == HexOrientation.flat
-                      ? 'Flat'
-                      : 'Pointy',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: gameState.hexOrientation == HexOrientation.flat
-                      ? Colors.blue.shade600
-                      : Colors.purple.shade600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  minimumSize: const Size(80, 36),
-                ),
-              ),
-            ),
-            // Vertical lines toggle button
-            ElevatedButton.icon(
-              onPressed: () {
-                gameState.toggleVerticalLines();
+            AnimatedBuilder(
+              animation: gameState,
+              builder: (context, child) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      print('DEBUG: TOGGLE BUTTON PRESSED - UI Level');
+                      gameState.toggleHexOrientation();
+                    },
+                    icon: Icon(
+                      gameState.hexOrientation == HexOrientation.flat
+                          ? Icons.hexagon_outlined
+                          : Icons.change_history_outlined,
+                      size: 16,
+                    ),
+                    label: Text(
+                      gameState.hexOrientation == HexOrientation.flat
+                          ? 'Flat'
+                          : 'Pointy',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: gameState.hexOrientation == HexOrientation.flat
+                          ? Colors.blue.shade600
+                          : Colors.purple.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      minimumSize: const Size(80, 36),
+                    ),
+                  ),
+                );
               },
-              icon: Icon(
-                gameState.showVerticalLines
-                    ? Icons.view_column
-                    : Icons.view_column_outlined,
-                size: 16,
-              ),
-              label: Text(
-                'Lines',
-                style: const TextStyle(fontSize: 12),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: gameState.showVerticalLines
-                    ? Colors.green.shade600
-                    : Colors.grey.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                minimumSize: const Size(80, 36),
-              ),
-            ),
-          ],
-        ),
-
-        // Third highlighting toggle buttons
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Left third toggle
-            Container(
-              margin: const EdgeInsets.only(bottom: 2),
-              child: ElevatedButton(
-                onPressed: () {
-                  gameState.toggleLeftThirdHighlight();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: gameState.highlightLeftThird
-                      ? Colors.cyan.shade600
-                      : Colors.grey.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: const Size(60, 28),
-                ),
-                child: const Text('Left', style: TextStyle(fontSize: 11)),
-              ),
-            ),
-            // Middle third toggle
-            Container(
-              margin: const EdgeInsets.only(bottom: 2),
-              child: ElevatedButton(
-                onPressed: () {
-                  gameState.toggleMiddleThirdHighlight();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: gameState.highlightMiddleThird
-                      ? Colors.yellow.shade700
-                      : Colors.grey.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: const Size(60, 28),
-                ),
-                child: const Text('Mid', style: TextStyle(fontSize: 11)),
-              ),
-            ),
-            // Right third toggle
-            ElevatedButton(
-              onPressed: () {
-                gameState.toggleRightThirdHighlight();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: gameState.highlightRightThird
-                    ? Colors.pink.shade600
-                    : Colors.grey.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(60, 28),
-              ),
-              child: const Text('Right', style: TextStyle(fontSize: 11)),
             ),
           ],
         ),

@@ -343,6 +343,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       chexxState.moveOnlyHexes.clear();
       chexxState.attackRangeHexes.clear();
       chexxState.highlightedHexes.clear();
+      chexxState.activeCardActionHexTiles = null;
       chexxState.targetedEnemy = null;
 
       // Deselect all units
@@ -624,13 +625,25 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       // Don't auto-complete action - let player complete it manually or when all sub-steps are done
 
-      // Highlight all hexes with current player's units
+      // Extract hex_tiles restriction from action
+      final hexTiles = action['hex_tiles'] as String?;
+      chexxState.activeCardActionHexTiles = hexTiles;
+
+      // Get allowed hexes based on hex_tiles restriction
+      final allowedHexes = (hexTiles != null && hexTiles != 'none')
+          ? chexxState.getHexesForThird(hexTiles)
+          : null;
+
+      // Highlight hexes with current player's units (filtered by hex_tiles if applicable)
       final currentPlayer = chexxState.currentPlayer;
       final playerUnitHexes = <core_hex.HexCoordinate>{};
 
       for (final unit in chexxState.simpleUnits) {
         if (unit.owner == currentPlayer) {
-          playerUnitHexes.add(unit.position);
+          // If hex_tiles restriction exists, only add units in allowed hexes
+          if (allowedHexes == null || allowedHexes.contains(unit.position)) {
+            playerUnitHexes.add(unit.position);
+          }
         }
       }
 
@@ -699,6 +712,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
         final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
         chexxState.isCardActionActive = false;
         chexxState.highlightedHexes.clear();
+        chexxState.activeCardActionHexTiles = null;
         chexxState.activeCardActionUnitId = null;
         chexxState.isCardActionUnitLocked = false;
         chexxState.isWaitingForAfterCombatMovement = false;

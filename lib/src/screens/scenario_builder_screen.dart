@@ -816,6 +816,96 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
             },
           ),
 
+          // Board thirds buttons
+          AnimatedBuilder(
+            animation: builderState,
+            builder: (context, child) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Lines toggle button
+                  Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    child: ElevatedButton.icon(
+                      onPressed: () => builderState.toggleVerticalLines(),
+                      icon: Icon(
+                        builderState.showVerticalLines
+                            ? Icons.view_column
+                            : Icons.view_column_outlined,
+                        size: 16,
+                      ),
+                      label: const Text(
+                        'Lines',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: builderState.showVerticalLines
+                            ? Colors.green.shade600
+                            : Colors.grey.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: const Size(80, 36),
+                      ),
+                    ),
+                  ),
+                  // Third highlighting buttons column
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Left third toggle
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        child: ElevatedButton(
+                          onPressed: () => builderState.toggleLeftThirdHighlight(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: builderState.highlightLeftThird
+                                ? Colors.cyan.shade600
+                                : Colors.grey.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: const Size(60, 28),
+                          ),
+                          child: const Text('Left', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                      // Middle third toggle
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        child: ElevatedButton(
+                          onPressed: () => builderState.toggleMiddleThirdHighlight(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: builderState.highlightMiddleThird
+                                ? Colors.yellow.shade700
+                                : Colors.grey.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: const Size(60, 28),
+                          ),
+                          child: const Text('Mid', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                      // Right third toggle
+                      ElevatedButton(
+                        onPressed: () => builderState.toggleRightThirdHighlight(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: builderState.highlightRightThird
+                              ? Colors.pink.shade600
+                              : Colors.grey.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: const Size(60, 28),
+                        ),
+                        child: const Text('Right', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(width: 8),
+
           // Back button
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -835,6 +925,9 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           color: const Color(0xFF1a1a2e),
           child: GestureDetector(
             onTapDown: (details) => _handleBoardTap(details.globalPosition),
+            onPanStart: _handlePanStart,
+            onPanUpdate: _handlePanUpdate,
+            onPanEnd: _handlePanEnd,
             child: CustomPaint(
               painter: ScenarioBuilderPainter(builderState, hexSize, this),
               size: Size.infinite,
@@ -1135,6 +1228,70 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       // Clear selection if clicking on empty space
       builderState.selectPlacedUnit(null);
     }
+  }
+
+  /// Handle pan start - detect if user is starting to drag a vertical line
+  void _handlePanStart(DragStartDetails details) {
+    // Only allow dragging in pointy orientation
+    if (builderState.hexOrientation != HexOrientation.pointy) return;
+    if (!builderState.showVerticalLines) return;
+
+    final renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(details.globalPosition);
+
+    // Adjust for the left panel width and top toolbar
+    final adjustedPosition = Offset(
+      localPosition.dx - 200, // Subtract left panel width
+      localPosition.dy - 50,  // Subtract top toolbar height
+    );
+
+    final size = renderBox.size;
+    final centerX = (size.width - 400) / 2; // Subtract panels
+
+    // Convert line x-coordinates from normalized space to screen space
+    final leftLineScreenX = centerX + hexSize * builderState.leftLineX;
+    final rightLineScreenX = centerX + hexSize * builderState.rightLineX;
+
+    // Check if tap is near left line (within 20 pixels)
+    const tapThreshold = 20.0;
+    if ((adjustedPosition.dx - leftLineScreenX).abs() < tapThreshold) {
+      builderState.startDraggingLine(DraggingLine.leftLine, adjustedPosition.dx);
+      return;
+    }
+
+    // Check if tap is near right line (within 20 pixels)
+    if ((adjustedPosition.dx - rightLineScreenX).abs() < tapThreshold) {
+      builderState.startDraggingLine(DraggingLine.rightLine, adjustedPosition.dx);
+      return;
+    }
+  }
+
+  /// Handle pan update - update line position during drag
+  void _handlePanUpdate(DragUpdateDetails details) {
+    if (builderState.currentlyDraggedLine == null) return;
+
+    final renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(details.globalPosition);
+
+    // Adjust for the left panel width and top toolbar
+    final adjustedPosition = Offset(
+      localPosition.dx - 200, // Subtract left panel width
+      localPosition.dy - 50,  // Subtract top toolbar height
+    );
+
+    final size = renderBox.size;
+    final centerX = (size.width - 400) / 2; // Subtract panels
+
+    // Convert screen x to normalized x-coordinate (divide by hexSize, subtract centerX offset)
+    final normalizedX = (adjustedPosition.dx - centerX) / hexSize;
+
+    builderState.updateDraggedLinePosition(normalizedX);
+  }
+
+  /// Handle pan end - snap line to nearest hex edge
+  void _handlePanEnd(DragEndDetails details) {
+    if (builderState.currentlyDraggedLine == null) return;
+    builderState.endDraggingLine();
   }
 
   HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {
@@ -1666,6 +1823,9 @@ class ScenarioBuilderPainter extends CustomPainter {
     // Draw placed structures (above tiles, below units)
     _drawPlacedStructures(canvas, size, centerX, centerY);
 
+    // Draw vertical partition lines (if enabled)
+    _drawVerticalLines(canvas, size, centerX, centerY);
+
     // Draw placed units (on top)
     _drawPlacedUnits(canvas, size, centerX, centerY);
   }
@@ -1726,6 +1886,51 @@ class ScenarioBuilderPainter extends CustomPainter {
             ..strokeWidth = 1.0
             ..color = Colors.black26);
         canvas.drawPath(path, borderPaint);
+
+        // Board thirds: Highlight hexes by third membership (when individual third toggles are active)
+        if (state.highlightLeftThird || state.highlightMiddleThird || state.highlightRightThird) {
+          final inLeft = state.leftThirdHexes.contains(coord);
+          final inMiddle = state.middleThirdHexes.contains(coord);
+          final inRight = state.rightThirdHexes.contains(coord);
+
+          // Determine which highlights should be shown
+          final showLeft = state.highlightLeftThird && inLeft;
+          final showMiddle = state.highlightMiddleThird && inMiddle;
+          final showRight = state.highlightRightThird && inRight;
+
+          // Use distinct colors for each third
+          if (showLeft && showMiddle) {
+            // Hex belongs to both left and middle (on boundary) and both are highlighted
+            final boundaryOverlay = Paint()
+              ..color = Colors.purple.withOpacity(0.2)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, boundaryOverlay);
+          } else if (showMiddle && showRight) {
+            // Hex belongs to both middle and right (on boundary) and both are highlighted
+            final boundaryOverlay = Paint()
+              ..color = Colors.orange.withOpacity(0.2)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, boundaryOverlay);
+          } else if (showLeft) {
+            // Hex in left third and left is highlighted
+            final leftOverlay = Paint()
+              ..color = Colors.cyan.withOpacity(0.15)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, leftOverlay);
+          } else if (showMiddle) {
+            // Hex in middle third and middle is highlighted
+            final middleOverlay = Paint()
+              ..color = Colors.yellow.withOpacity(0.15)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, middleOverlay);
+          } else if (showRight) {
+            // Hex in right third and right is highlighted
+            final rightOverlay = Paint()
+              ..color = Colors.pink.withOpacity(0.15)
+              ..style = PaintingStyle.fill;
+            canvas.drawPath(path, rightOverlay);
+          }
+        }
 
         // Draw gold highlight for last edited tile
         if (state.lastEditedTile == coord) {
@@ -2105,6 +2310,92 @@ class ScenarioBuilderPainter extends CustomPainter {
 
   Color _getTileTypeColor(HexType type) {
     return TileColors.getColorForTileType(type);
+  }
+
+  void _drawVerticalLines(Canvas canvas, Size size, double centerX, double centerY) {
+    if (!state.showVerticalLines) return;
+
+    // Convert normalized x-coordinates to screen x-coordinates
+    // The boundaries are stored in normalized space (as if hexSize = 1)
+    // Multiply by hexSize to get actual screen coordinates
+    final leftLineScreenX = centerX + hexSize * state.leftLineX;
+    final rightLineScreenX = centerX + hexSize * state.rightLineX;
+
+    // Draw vertical lines from top to bottom of canvas
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.7)
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke;
+
+    // Draw left dividing line
+    canvas.drawLine(
+      Offset(leftLineScreenX, 0),
+      Offset(leftLineScreenX, size.height),
+      linePaint,
+    );
+
+    // Draw right dividing line
+    canvas.drawLine(
+      Offset(rightLineScreenX, 0),
+      Offset(rightLineScreenX, size.height),
+      linePaint,
+    );
+
+    // Draw labels for the thirds
+    final labelPaint = TextPainter(
+      textDirection: TextDirection.ltr,
+    );
+
+    // Use a better calculation: find the midpoint between left edge of screen and left line
+    final leftEdgeX = 0.0;
+    final leftThirdCenterX = (leftEdgeX + leftLineScreenX) / 2;
+
+    // Left third label
+    labelPaint.text = TextSpan(
+      text: 'LEFT THIRD',
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.8),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    labelPaint.layout();
+    labelPaint.paint(
+      canvas,
+      Offset(leftThirdCenterX - labelPaint.width / 2, 20),
+    );
+
+    // Middle third label
+    final middleThirdCenterX = (leftLineScreenX + rightLineScreenX) / 2;
+    labelPaint.text = TextSpan(
+      text: 'MIDDLE THIRD',
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.8),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    labelPaint.layout();
+    labelPaint.paint(
+      canvas,
+      Offset(middleThirdCenterX - labelPaint.width / 2, 20),
+    );
+
+    // Right third label
+    final rightThirdCenterX = (rightLineScreenX + size.width) / 2;
+    labelPaint.text = TextSpan(
+      text: 'RIGHT THIRD',
+      style: TextStyle(
+        color: Colors.white.withOpacity(0.8),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    labelPaint.layout();
+    labelPaint.paint(
+      canvas,
+      Offset(rightThirdCenterX - labelPaint.width / 2, 20),
+    );
   }
 
   @override

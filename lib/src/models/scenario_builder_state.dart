@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
@@ -8,6 +9,12 @@ import 'unit_type_config.dart';
 import 'game_type_config.dart';
 import 'hex_orientation.dart';
 import '../../core/interfaces/unit_factory.dart';
+
+/// Enumeration of which vertical line is being dragged (for board thirds)
+enum DraggingLine {
+  leftLine,
+  rightLine,
+}
 
 /// Enumeration of structure types
 enum StructureType {
@@ -191,6 +198,21 @@ class ScenarioBuilderState extends ChangeNotifier {
 
   // Current game type configuration
   GameTypeConfig? currentGameTypeConfig;
+
+  // Board partitioning: divide board into thirds with vertical lines
+  bool showVerticalLines = false;
+  bool highlightLeftThird = false;
+  bool highlightMiddleThird = false;
+  bool highlightRightThird = false;
+  Set<HexCoordinate> leftThirdHexes = {};
+  Set<HexCoordinate> middleThirdHexes = {};
+  Set<HexCoordinate> rightThirdHexes = {};
+  double leftLineX = 0.0;
+  double rightLineX = 0.0;
+
+  // Line dragging state
+  DraggingLine? currentlyDraggedLine;
+  double? dragStartX;
 
   ScenarioBuilderState() {
     _initializeAvailableUnits();
@@ -902,6 +924,27 @@ class ScenarioBuilderState extends ChangeNotifier {
       'type': tile.type.toString().split('.').last,
     }).toList();
 
+    // Save board thirds data
+    baseConfig['board_thirds'] = {
+      'left_line_x': leftLineX,
+      'right_line_x': rightLineX,
+      'left_third_hexes': leftThirdHexes.map((hex) => {
+        'q': hex.q,
+        'r': hex.r,
+        's': hex.s,
+      }).toList(),
+      'middle_third_hexes': middleThirdHexes.map((hex) => {
+        'q': hex.q,
+        'r': hex.r,
+        's': hex.s,
+      }).toList(),
+      'right_third_hexes': rightThirdHexes.map((hex) => {
+        'q': hex.q,
+        'r': hex.r,
+        's': hex.s,
+      }).toList(),
+    };
+
     return baseConfig;
   }
 
@@ -1144,6 +1187,62 @@ class ScenarioBuilderState extends ChangeNotifier {
         }
       }
 
+      // Load board thirds data
+      if (scenarioData.containsKey('board_thirds')) {
+        try {
+          final thirdsData = scenarioData['board_thirds'] as Map<String, dynamic>;
+
+          leftLineX = thirdsData['left_line_x'] as double? ?? 0.0;
+          rightLineX = thirdsData['right_line_x'] as double? ?? 0.0;
+
+          // Load left third hexes
+          if (thirdsData.containsKey('left_third_hexes')) {
+            leftThirdHexes.clear();
+            final leftHexes = thirdsData['left_third_hexes'] as List<dynamic>;
+            for (final hexData in leftHexes) {
+              final hex = hexData as Map<String, dynamic>;
+              leftThirdHexes.add(HexCoordinate(
+                hex['q'] as int,
+                hex['r'] as int,
+                hex['s'] as int,
+              ));
+            }
+          }
+
+          // Load middle third hexes
+          if (thirdsData.containsKey('middle_third_hexes')) {
+            middleThirdHexes.clear();
+            final middleHexes = thirdsData['middle_third_hexes'] as List<dynamic>;
+            for (final hexData in middleHexes) {
+              final hex = hexData as Map<String, dynamic>;
+              middleThirdHexes.add(HexCoordinate(
+                hex['q'] as int,
+                hex['r'] as int,
+                hex['s'] as int,
+              ));
+            }
+          }
+
+          // Load right third hexes
+          if (thirdsData.containsKey('right_third_hexes')) {
+            rightThirdHexes.clear();
+            final rightHexes = thirdsData['right_third_hexes'] as List<dynamic>;
+            for (final hexData in rightHexes) {
+              final hex = hexData as Map<String, dynamic>;
+              rightThirdHexes.add(HexCoordinate(
+                hex['q'] as int,
+                hex['r'] as int,
+                hex['s'] as int,
+              ));
+            }
+          }
+
+          print('Successfully loaded board thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
+        } catch (e) {
+          print('Error loading board thirds data: $e');
+        }
+      }
+
       print('Successfully loaded scenario: $scenarioName with ${board.allTiles.length} tiles, ${placedUnits.length} units, ${placedStructures.length} structures, and ${metaHexes.length} meta hexes');
       notifyListeners();
     } catch (e) {
@@ -1172,5 +1271,240 @@ class ScenarioBuilderState extends ChangeNotifier {
     } catch (e) {
       return null;
     }
+  }
+
+  /// Toggle vertical lines display
+  void toggleVerticalLines() {
+    showVerticalLines = !showVerticalLines;
+    if (showVerticalLines) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Toggle left third highlighting
+  void toggleLeftThirdHighlight() {
+    highlightLeftThird = !highlightLeftThird;
+    if (highlightLeftThird && leftThirdHexes.isEmpty) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Toggle middle third highlighting
+  void toggleMiddleThirdHighlight() {
+    highlightMiddleThird = !highlightMiddleThird;
+    if (highlightMiddleThird && middleThirdHexes.isEmpty) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Toggle right third highlighting
+  void toggleRightThirdHighlight() {
+    highlightRightThird = !highlightRightThird;
+    if (highlightRightThird && rightThirdHexes.isEmpty) {
+      calculateBoardThirds();
+    }
+    notifyListeners();
+  }
+
+  /// Calculate board partitioning into thirds with vertical lines (for POINTY-TOP layout)
+  void calculateBoardThirds() {
+    leftThirdHexes.clear();
+    middleThirdHexes.clear();
+    rightThirdHexes.clear();
+
+    if (board.tiles.isEmpty) return;
+
+    // Calculate x-positions for all hexes using POINTY-TOP formula
+    // x = sqrt(3) * q + sqrt(3)/2 * r
+    double? minX;
+    double? maxX;
+
+    final sqrt3 = sqrt(3.0);
+    final hexPositions = <HexCoordinate, double>{};
+
+    for (final tile in board.tiles.values) {
+      final q = tile.coordinate.q.toDouble();
+      final r = tile.coordinate.r.toDouble();
+
+      // Pointy-top x-coordinate (normalized, hexSize = 1)
+      final hexCenterX = sqrt3 * q + (sqrt3 / 2.0) * r;
+      hexPositions[tile.coordinate] = hexCenterX;
+
+      if (minX == null || hexCenterX < minX) minX = hexCenterX;
+      if (maxX == null || hexCenterX > maxX) maxX = hexCenterX;
+    }
+
+    if (minX == null || maxX == null) return;
+
+    // Calculate the range and third boundaries in x-coordinate space
+    final xRange = maxX - minX;
+    final thirdSize = xRange / 3.0;
+
+    // Boundaries in x-coordinate space
+    final leftBoundary = minX + thirdSize;
+    final rightBoundary = minX + (thirdSize * 2);
+
+    print('DEBUG Board Thirds (Pointy): minX=$minX, maxX=$maxX, xRange=$xRange');
+    print('DEBUG Boundaries: left=$leftBoundary, right=$rightBoundary');
+
+    // Categorize each hex into thirds
+    // Hexes near boundaries may belong to multiple thirds
+    for (final tile in board.tiles.values) {
+      final hexCenterX = hexPositions[tile.coordinate]!;
+
+      // A hex in pointy-top spans approximately ±(sqrt(3)/2) in x-space
+      final hexHalfWidth = sqrt3 / 2.0;
+      final hexLeftEdgeX = hexCenterX - hexHalfWidth;
+      final hexRightEdgeX = hexCenterX + hexHalfWidth;
+
+      // Determine which third(s) this hex belongs to
+      bool inLeft = hexLeftEdgeX < leftBoundary;
+      bool inRight = hexRightEdgeX > rightBoundary;
+      bool inMiddle = hexRightEdgeX > leftBoundary && hexLeftEdgeX < rightBoundary;
+
+      // A hex can belong to multiple thirds if it straddles a boundary
+      if (inLeft) {
+        leftThirdHexes.add(tile.coordinate);
+      }
+      if (inMiddle) {
+        middleThirdHexes.add(tile.coordinate);
+      }
+      if (inRight) {
+        rightThirdHexes.add(tile.coordinate);
+      }
+    }
+
+    print('DEBUG Thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
+
+    // Store the x-coordinates of the vertical lines for rendering
+    // These are in normalized x-coordinate space (will be multiplied by hexSize during rendering)
+    leftLineX = leftBoundary;
+    rightLineX = rightBoundary;
+
+    notifyListeners();
+  }
+
+  /// Start dragging a vertical line (only allowed in Pointy orientation)
+  void startDraggingLine(DraggingLine line, double startX) {
+    if (hexOrientation != HexOrientation.pointy) {
+      return; // Only allow dragging in pointy mode
+    }
+    currentlyDraggedLine = line;
+    dragStartX = startX;
+    notifyListeners();
+  }
+
+  /// Update line position during drag
+  void updateDraggedLinePosition(double newX) {
+    if (currentlyDraggedLine == null) return;
+
+    if (currentlyDraggedLine == DraggingLine.leftLine) {
+      leftLineX = newX;
+    } else if (currentlyDraggedLine == DraggingLine.rightLine) {
+      rightLineX = newX;
+    }
+
+    notifyListeners();
+  }
+
+  /// End dragging: snap to nearest hex edge and recalculate hex membership
+  void endDraggingLine() {
+    if (currentlyDraggedLine == null) return;
+
+    // Find nearest hex edge x-coordinate
+    final allEdgeXs = _getAllHexEdgeXCoordinates();
+
+    if (currentlyDraggedLine == DraggingLine.leftLine) {
+      leftLineX = _findNearestValue(leftLineX, allEdgeXs);
+    } else if (currentlyDraggedLine == DraggingLine.rightLine) {
+      rightLineX = _findNearestValue(rightLineX, allEdgeXs);
+    }
+
+    // Recalculate hex membership with new line positions
+    _recalculateThirdsWithCustomBoundaries(leftLineX, rightLineX);
+
+    // Clear drag state
+    currentlyDraggedLine = null;
+    dragStartX = null;
+
+    notifyListeners();
+  }
+
+  /// Get all hex edge x-coordinates for snapping
+  List<double> _getAllHexEdgeXCoordinates() {
+    final sqrt3 = sqrt(3.0);
+    final hexHalfWidth = sqrt3 / 2.0;
+    final edgeXs = <double>{};
+
+    for (final tile in board.tiles.values) {
+      final q = tile.coordinate.q.toDouble();
+      final r = tile.coordinate.r.toDouble();
+      final hexCenterX = sqrt3 * q + (sqrt3 / 2.0) * r;
+
+      // Add both left and right edges of this hex
+      edgeXs.add(hexCenterX - hexHalfWidth);
+      edgeXs.add(hexCenterX + hexHalfWidth);
+    }
+
+    return edgeXs.toList()..sort();
+  }
+
+  /// Find nearest value in a list
+  double _findNearestValue(double target, List<double> values) {
+    if (values.isEmpty) return target;
+
+    double nearest = values[0];
+    double minDistance = (target - values[0]).abs();
+
+    for (final value in values) {
+      final distance = (target - value).abs();
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearest = value;
+      }
+    }
+
+    return nearest;
+  }
+
+  /// Recalculate hex thirds membership with custom boundary positions
+  void _recalculateThirdsWithCustomBoundaries(double leftBoundary, double rightBoundary) {
+    leftThirdHexes.clear();
+    middleThirdHexes.clear();
+    rightThirdHexes.clear();
+
+    if (board.tiles.isEmpty) return;
+
+    final sqrt3 = sqrt(3.0);
+    final hexHalfWidth = sqrt3 / 2.0;
+
+    for (final tile in board.tiles.values) {
+      final q = tile.coordinate.q.toDouble();
+      final r = tile.coordinate.r.toDouble();
+      final hexCenterX = sqrt3 * q + (sqrt3 / 2.0) * r;
+
+      final hexLeftEdgeX = hexCenterX - hexHalfWidth;
+      final hexRightEdgeX = hexCenterX + hexHalfWidth;
+
+      // Determine which third(s) this hex belongs to
+      bool inLeft = hexLeftEdgeX < leftBoundary;
+      bool inRight = hexRightEdgeX > rightBoundary;
+      bool inMiddle = hexRightEdgeX > leftBoundary && hexLeftEdgeX < rightBoundary;
+
+      if (inLeft) {
+        leftThirdHexes.add(tile.coordinate);
+      }
+      if (inMiddle) {
+        middleThirdHexes.add(tile.coordinate);
+      }
+      if (inRight) {
+        rightThirdHexes.add(tile.coordinate);
+      }
+    }
+
+    print('DEBUG Recalculated Thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
   }
 }

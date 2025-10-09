@@ -87,6 +87,9 @@ class ChexxGameState extends GameStateBase {
   // Card mode: hexes that should be highlighted for current action
   Set<core_hex.HexCoordinate> highlightedHexes = {};
 
+  // Card mode: hex_tiles restriction for current action (e.g., "left third", "middle third", "right third")
+  String? activeCardActionHexTiles;
+
   // Card mode: track which unit is performing the current card action
   String? activeCardActionUnitId;
 
@@ -111,11 +114,8 @@ class ChexxGameState extends GameStateBase {
   Set<core_hex.HexCoordinate> retreatHexes = {};
   bool isWaitingForRetreat = false;
 
-  // Board partitioning: divide board into thirds with vertical lines
-  bool showVerticalLines = false;
-  bool highlightLeftThird = false;
-  bool highlightMiddleThird = false;
-  bool highlightRightThird = false;
+  // Board partitioning: divide board into thirds with vertical lines (loaded from scenario)
+  bool showVerticalLines = false; // Always true in game mode when thirds data is loaded
   Set<core_hex.HexCoordinate> leftThirdHexes = {};
   Set<core_hex.HexCoordinate> middleThirdHexes = {};
   Set<core_hex.HexCoordinate> rightThirdHexes = {};
@@ -169,6 +169,10 @@ class ChexxGameState extends GameStateBase {
     print('DEBUG: About to load structures from scenario');
     _loadStructuresFromScenario(scenarioConfig);
     print('DEBUG: Finished loading structures, total structures now: ${placedStructures.length}');
+
+    print('DEBUG: About to load board thirds from scenario');
+    _loadBoardThirdsFromScenario(scenarioConfig);
+    print('DEBUG: Finished loading board thirds');
 
     _calculateAvailableActions();
     print('DEBUG: INITIALIZE FROM SCENARIO END');
@@ -566,6 +570,70 @@ class ChexxGameState extends GameStateBase {
     }
 
     print('Successfully loaded ${placedStructures.length} structures from scenario');
+  }
+
+  void _loadBoardThirdsFromScenario(Map<String, dynamic> scenarioConfig) {
+    // Clear existing thirds data
+    leftThirdHexes.clear();
+    middleThirdHexes.clear();
+    rightThirdHexes.clear();
+
+    final boardThirds = scenarioConfig['board_thirds'] as Map<String, dynamic>?;
+    if (boardThirds == null) {
+      print('No board_thirds found in scenario');
+      return;
+    }
+
+    try {
+      leftLineX = boardThirds['left_line_x'] as double? ?? 0.0;
+      rightLineX = boardThirds['right_line_x'] as double? ?? 0.0;
+
+      // Load left third hexes
+      if (boardThirds.containsKey('left_third_hexes')) {
+        final leftHexes = boardThirds['left_third_hexes'] as List<dynamic>;
+        for (final hexData in leftHexes) {
+          final hex = hexData as Map<String, dynamic>;
+          leftThirdHexes.add(core_hex.HexCoordinate(
+            hex['q'] as int,
+            hex['r'] as int,
+            hex['s'] as int,
+          ));
+        }
+      }
+
+      // Load middle third hexes
+      if (boardThirds.containsKey('middle_third_hexes')) {
+        final middleHexes = boardThirds['middle_third_hexes'] as List<dynamic>;
+        for (final hexData in middleHexes) {
+          final hex = hexData as Map<String, dynamic>;
+          middleThirdHexes.add(core_hex.HexCoordinate(
+            hex['q'] as int,
+            hex['r'] as int,
+            hex['s'] as int,
+          ));
+        }
+      }
+
+      // Load right third hexes
+      if (boardThirds.containsKey('right_third_hexes')) {
+        final rightHexes = boardThirds['right_third_hexes'] as List<dynamic>;
+        for (final hexData in rightHexes) {
+          final hex = hexData as Map<String, dynamic>;
+          rightThirdHexes.add(core_hex.HexCoordinate(
+            hex['q'] as int,
+            hex['r'] as int,
+            hex['s'] as int,
+          ));
+        }
+      }
+
+      // Always show vertical lines in game mode (no toggle needed)
+      showVerticalLines = true;
+
+      print('Successfully loaded board thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
+    } catch (e) {
+      print('Error loading board thirds data: $e');
+    }
   }
 
   /// Toggle hexagon orientation between flat and pointy
@@ -1173,125 +1241,7 @@ class ChexxGameState extends GameStateBase {
     notifyListeners();
   }
 
-  /// Toggle vertical lines display
-  void toggleVerticalLines() {
-    showVerticalLines = !showVerticalLines;
-    if (showVerticalLines) {
-      calculateBoardThirds();
-    }
-    notifyListeners();
-  }
-
-  /// Toggle left third highlighting
-  void toggleLeftThirdHighlight() {
-    highlightLeftThird = !highlightLeftThird;
-    if (highlightLeftThird && leftThirdHexes.isEmpty) {
-      calculateBoardThirds();
-    }
-    notifyListeners();
-  }
-
-  /// Toggle middle third highlighting
-  void toggleMiddleThirdHighlight() {
-    highlightMiddleThird = !highlightMiddleThird;
-    if (highlightMiddleThird && middleThirdHexes.isEmpty) {
-      calculateBoardThirds();
-    }
-    notifyListeners();
-  }
-
-  /// Toggle right third highlighting
-  void toggleRightThirdHighlight() {
-    highlightRightThird = !highlightRightThird;
-    if (highlightRightThird && rightThirdHexes.isEmpty) {
-      calculateBoardThirds();
-    }
-    notifyListeners();
-  }
-
-  /// Calculate board partitioning into thirds with vertical lines (for POINTY-TOP layout)
-  void calculateBoardThirds() {
-    leftThirdHexes.clear();
-    middleThirdHexes.clear();
-    rightThirdHexes.clear();
-
-    if (board.tiles.isEmpty) return;
-
-    // Calculate x-positions for all hexes using POINTY-TOP formula
-    // x = sqrt(3) * q + sqrt(3)/2 * r
-    double? minX;
-    double? maxX;
-
-    final sqrt3 = sqrt(3.0);
-    final hexPositions = <src_hex.HexCoordinate, double>{};
-
-    for (final tile in board.tiles.values) {
-      final q = tile.coordinate.q.toDouble();
-      final r = tile.coordinate.r.toDouble();
-
-      // Pointy-top x-coordinate (normalized, hexSize = 1)
-      final hexCenterX = sqrt3 * q + (sqrt3 / 2.0) * r;
-      hexPositions[tile.coordinate] = hexCenterX;
-
-      if (minX == null || hexCenterX < minX) minX = hexCenterX;
-      if (maxX == null || hexCenterX > maxX) maxX = hexCenterX;
-    }
-
-    if (minX == null || maxX == null) return;
-
-    // Calculate the range and third boundaries in x-coordinate space
-    final xRange = maxX - minX;
-    final thirdSize = xRange / 3.0;
-
-    // Boundaries in x-coordinate space
-    final leftBoundary = minX + thirdSize;
-    final rightBoundary = minX + (thirdSize * 2);
-
-    print('DEBUG Board Thirds (Pointy): minX=$minX, maxX=$maxX, xRange=$xRange');
-    print('DEBUG Boundaries: left=$leftBoundary, right=$rightBoundary');
-
-    // Categorize each hex into thirds
-    // Hexes near boundaries may belong to multiple thirds
-    for (final tile in board.tiles.values) {
-      final coreCoord = core_hex.HexCoordinate(
-        tile.coordinate.q,
-        tile.coordinate.r,
-        tile.coordinate.s,
-      );
-
-      final hexCenterX = hexPositions[tile.coordinate]!;
-
-      // A hex in pointy-top spans approximately ±(sqrt(3)/2) in x-space
-      final hexHalfWidth = sqrt3 / 2.0;
-      final hexLeftEdgeX = hexCenterX - hexHalfWidth;
-      final hexRightEdgeX = hexCenterX + hexHalfWidth;
-
-      // Determine which third(s) this hex belongs to
-      bool inLeft = hexLeftEdgeX < leftBoundary;
-      bool inRight = hexRightEdgeX > rightBoundary;
-      bool inMiddle = hexRightEdgeX > leftBoundary && hexLeftEdgeX < rightBoundary;
-
-      // A hex can belong to multiple thirds if it straddles a boundary
-      if (inLeft) {
-        leftThirdHexes.add(coreCoord);
-      }
-      if (inMiddle) {
-        middleThirdHexes.add(coreCoord);
-      }
-      if (inRight) {
-        rightThirdHexes.add(coreCoord);
-      }
-    }
-
-    print('DEBUG Thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
-
-    // Store the x-coordinates of the vertical lines for rendering
-    // These are in normalized x-coordinate space (will be multiplied by hexSize during rendering)
-    leftLineX = leftBoundary;
-    rightLineX = rightBoundary;
-  }
-
-  /// Get hexes for a specific third
+  /// Get hexes for a specific third (loaded from scenario)
   Set<core_hex.HexCoordinate> getHexesForThird(String hexTiles) {
     switch (hexTiles.toLowerCase()) {
       case 'left third':
