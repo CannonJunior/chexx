@@ -277,47 +277,83 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Current player indicator and Menu button column
+        // Player indicators - both players shown
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Player 1
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: gameState.currentPlayer.name == 'player1'
                     ? Colors.blue.shade600
-                    : Colors.red.shade600,
+                    : Colors.grey.shade600,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(
-                '${gameState.currentPlayer.name == 'player1' ? 'Player 1' : 'Player 2'} Turn',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Player 1${gameState.currentPlayer.name == 'player1' ? ' Turn' : ''}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Points: ${gameState.player1Points}/${gameState.player1WinPoints}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            // Menu button under player indicator
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            const SizedBox(height: 6),
+            // Player 2
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: gameState.currentPlayer.name == 'player2'
+                    ? Colors.red.shade600
+                    : Colors.grey.shade600,
+                borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text('Menu'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Player 2${gameState.currentPlayer.name == 'player2' ? ' Turn' : ''}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Points: ${gameState.player2Points}/${gameState.player2WinPoints}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
 
-        // Orientation and vertical lines toggle buttons
+        // Orientation toggle button
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Orientation toggle button
             AnimatedBuilder(
               animation: gameState,
               builder: (context, child) {
@@ -355,12 +391,24 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
           ],
         ),
 
-        // Settings and Turn counter row
-        Row(
+        // Menu button and Settings icon column
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            // Menu button
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              ),
+              child: const Text('Menu'),
+            ),
+            const SizedBox(height: 4),
             // Settings icon
             Container(
-              margin: const EdgeInsets.only(right: 8),
               child: IconButton(
                 onPressed: () => setState(() {
                   _showSettingsPanel = !_showSettingsPanel;

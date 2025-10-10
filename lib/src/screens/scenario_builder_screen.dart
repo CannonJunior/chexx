@@ -1030,18 +1030,104 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
                     const Spacer(),
 
+                    // Win Conditions Section
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade900.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Win Conditions',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Player 1 Points:',
+                                      style: TextStyle(color: Colors.white70, fontSize: 10),
+                                    ),
+                                    TextField(
+                                      controller: TextEditingController(
+                                        text: builderState.player1WinPoints.toString(),
+                                      ),
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.all(4),
+                                        border: OutlineInputBorder(
+                                          borderSide: BorderSide(color: Colors.blue.shade300),
+                                        ),
+                                      ),
+                                      onChanged: (value) {
+                                        final points = int.tryParse(value);
+                                        if (points != null && points > 0) {
+                                          builderState.player1WinPoints = points;
+                                          builderState.notifyListeners();
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Player 2 Points:',
+                                      style: TextStyle(color: Colors.white70, fontSize: 10),
+                                    ),
+                                    TextField(
+                                      controller: TextEditingController(
+                                        text: builderState.player2WinPoints.toString(),
+                                      ),
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.all(4),
+                                        border: OutlineInputBorder(
+                                          borderSide: BorderSide(color: Colors.red.shade300),
+                                        ),
+                                      ),
+                                      onChanged: (value) {
+                                        final points = int.tryParse(value);
+                                        if (points != null && points > 0) {
+                                          builderState.player2WinPoints = points;
+                                          builderState.notifyListeners();
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
                     // Action buttons
                     _buildActionButton(
                       'Clear All Units',
                       Colors.orange.shade600,
                       () => _showClearUnitsDialog(),
-                    ),
-                    const SizedBox(height: 8),
-
-                    _buildActionButton(
-                      'Reset Meta Hexes',
-                      Colors.purple.shade600,
-                      () => builderState.resetMetaHexes(),
                     ),
                     const SizedBox(height: 8),
 

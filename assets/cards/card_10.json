@@ -1,11 +1,11 @@
 {
   "id": "card_10",
-  "name": "Card 10",
-  "description": "This is card number 10. Type: defense. A powerful card for your deck.",
-  "cost": 9,
+  "name": "Direct From HQ",
+  "description": "Issue an order 4 units of your choice.",
+  "cost": 1,
   "type": "defense",
   "attributes": {
-    "power": 1,
+    "power": 3,
     "rarity": "common"
   },
   "imageAsset": "",
@@ -13,7 +13,40 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
       "sub_steps": [
         "unit_selection",
         "before_combat_movement",

@@ -1,11 +1,11 @@
 {
-  "id": "card_2",
-  "name": "Card 2",
-  "description": "This is card number 2. Type: defense. A powerful card for your deck.",
-  "cost": 1,
-  "type": "defense",
+  "id": "card_9",
+  "name": "Attack",
+  "description": "Issue an order to 3 units on the Right Flank.",
+  "cost": 8,
+  "type": "support",
   "attributes": {
-    "power": 3,
+    "power": 5,
     "rarity": "common"
   },
   "imageAsset": "",
@@ -13,7 +13,7 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name",
+      "hex_tiles": "right third",
       "sub_steps": [
         "unit_selection",
         "before_combat_movement",
@@ -24,7 +24,18 @@
     {
       "action_type": "order",
       "hex_restrictions": "none",
-      "hex_tiles": "name",
+      "hex_tiles": "right third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "right third",
       "sub_steps": [
         "unit_selection",
         "before_combat_movement",

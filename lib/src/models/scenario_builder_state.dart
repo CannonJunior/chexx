@@ -181,6 +181,10 @@ class ScenarioBuilderState extends ChangeNotifier {
   HexType? selectedTileType;
   String scenarioName = 'Custom Scenario';
 
+  // Win conditions
+  int player1WinPoints = 10;
+  int player2WinPoints = 10;
+
   // New properties for enhanced editing
   HexCoordinate? lastEditedTile;
   HexCoordinate? cursorPosition;
@@ -945,6 +949,11 @@ class ScenarioBuilderState extends ChangeNotifier {
       }).toList(),
     };
 
+    baseConfig['win_conditions'] = {
+      'player1_points': player1WinPoints,
+      'player2_points': player2WinPoints,
+    };
+
     return baseConfig;
   }
 
@@ -1240,6 +1249,18 @@ class ScenarioBuilderState extends ChangeNotifier {
           print('Successfully loaded board thirds: left=${leftThirdHexes.length}, middle=${middleThirdHexes.length}, right=${rightThirdHexes.length}');
         } catch (e) {
           print('Error loading board thirds data: $e');
+        }
+      }
+
+      // Load win conditions
+      if (scenarioData.containsKey('win_conditions')) {
+        try {
+          final winConditions = scenarioData['win_conditions'] as Map<String, dynamic>;
+          player1WinPoints = winConditions['player1_points'] as int? ?? 10;
+          player2WinPoints = winConditions['player2_points'] as int? ?? 10;
+          print('Successfully loaded win conditions: P1=$player1WinPoints, P2=$player2WinPoints');
+        } catch (e) {
+          print('Error loading win conditions: $e');
         }
       }
 

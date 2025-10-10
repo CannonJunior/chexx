@@ -61,6 +61,12 @@ class ChexxGameState extends GameStateBase {
   int player1Rewards = 0;
   int player2Rewards = 0;
 
+  // Point tracking and win conditions
+  int player1Points = 0;
+  int player2Points = 0;
+  int player1WinPoints = 10;
+  int player2WinPoints = 10;
+
   // Hex orientation for rendering
   HexOrientation hexOrientation = HexOrientation.flat;
 
@@ -107,6 +113,15 @@ class ChexxGameState extends GameStateBase {
 
   // Card mode: track if we're waiting for after-combat movement decision
   bool isWaitingForAfterCombatMovement = false;
+
+  // Card mode: track if last movement was move-only (beyond move_and_fire range)
+  bool lastMoveWasMoveOnly = false;
+
+  // Barbwire decision: track when unit moved onto barbwire and needs to decide
+  bool isWaitingForBarbwireDecision = false;
+  core_hex.HexCoordinate? barbwireDecisionHex;
+  void Function()? onBarbwireRemove;
+  void Function()? onBarbwireKeep;
 
   // Retreat system: track unit that must retreat and how many retreat dice rolled
   SimpleGameUnit? unitMustRetreat;
@@ -173,6 +188,10 @@ class ChexxGameState extends GameStateBase {
     print('DEBUG: About to load board thirds from scenario');
     _loadBoardThirdsFromScenario(scenarioConfig);
     print('DEBUG: Finished loading board thirds');
+
+    print('DEBUG: About to load win conditions from scenario');
+    _loadWinConditionsFromScenario(scenarioConfig);
+    print('DEBUG: Finished loading win conditions');
 
     _calculateAvailableActions();
     print('DEBUG: INITIALIZE FROM SCENARIO END');
@@ -636,6 +655,34 @@ class ChexxGameState extends GameStateBase {
     }
   }
 
+  void _loadWinConditionsFromScenario(Map<String, dynamic> scenarioConfig) {
+    final winConditions = scenarioConfig['win_conditions'] as Map<String, dynamic>?;
+    if (winConditions == null) {
+      print('No win_conditions found in scenario, using defaults');
+      return;
+    }
+
+    try {
+      player1WinPoints = winConditions['player1_points'] as int? ?? 10;
+      player2WinPoints = winConditions['player2_points'] as int? ?? 10;
+      print('Successfully loaded win conditions: P1=$player1WinPoints, P2=$player2WinPoints');
+    } catch (e) {
+      print('Error loading win conditions data: $e');
+    }
+  }
+
+  /// Award points to a player (for defeating units or achieving medals)
+  void awardPoints(Player player, int points) {
+    if (player == Player.player1) {
+      player1Points += points;
+      print('Player 1 awarded $points points (total: $player1Points/$player1WinPoints)');
+    } else {
+      player2Points += points;
+      print('Player 2 awarded $points points (total: $player2Points/$player2WinPoints)');
+    }
+    notifyListeners();
+  }
+
   /// Toggle hexagon orientation between flat and pointy
   void toggleHexOrientation() {
     print('DEBUG: TOGGLE HEX ORIENTATION - Before: ${hexOrientation.name}');
@@ -747,15 +794,17 @@ class ChexxGameState extends GameStateBase {
     final actualMoveAndFire = moveAndFire + (moveAndFireBonus ?? 0);
     final actualMoveOnly = moveOnly + (moveOnlyBonus ?? 0);
 
-    // Check if unit is in barbwire - cannot move
-    for (final structure in placedStructures) {
-      if (structure.position.q == unit.position.q &&
-          structure.position.r == unit.position.r &&
-          structure.position.s == unit.position.s) {
-        final structureType = structure.type.name.toLowerCase();
-        if (structureType == 'barbwire' || structureType == 'barbed_wire') {
-          // Cannot move from barbwire
-          return;
+    // Check if infantry unit is in barbwire - cannot move until barbwire is removed
+    if (unit.unitType.toLowerCase() == 'infantry') {
+      for (final structure in placedStructures) {
+        if (structure.position.q == unit.position.q &&
+            structure.position.r == unit.position.r &&
+            structure.position.s == unit.position.s) {
+          final structureType = structure.type.name.toLowerCase();
+          if (structureType == 'barbwire' || structureType == 'barbed_wire') {
+            // Infantry cannot move from barbwire until it's removed
+            return;
+          }
         }
       }
     }
@@ -798,30 +847,28 @@ class ChexxGameState extends GameStateBase {
         final moveCost = _getHexMovementCost(neighbor, unit, currentHex);
         if (moveCost == 0) continue; // Impassable
 
-        final newDistance = distance + moveCost;
+        // Barbwire: costs 1 to enter but must stop there
+        final isBarbwire = moveCost >= 999;
+        final actualMoveCost = isBarbwire ? 1 : moveCost;
 
-        // Barbwire: must stop here (cost 999)
-        if (moveCost >= 999) {
-          visited[neighbor] = newDistance;
-          if (newDistance <= actualMoveAndFire) {
-            moveAndFireHexes.add(neighbor);
-          } else if (newDistance <= actualMoveOnly) {
-            moveOnlyHexes.add(neighbor);
-          }
-          continue; // Don't add to queue - movement stops here
-        }
+        final newDistance = distance + actualMoveCost;
 
+        // Mark as visited
         visited[neighbor] = newDistance;
 
-        // Add to move_and_fire if within range
+        // Check if reachable and add to appropriate set
         if (newDistance <= actualMoveAndFire) {
           moveAndFireHexes.add(neighbor);
-          queue.add((neighbor, newDistance));
-        }
-        // Add to move_only if within that range
-        else if (newDistance <= actualMoveOnly) {
+          // If barbwire, don't add to queue (movement stops)
+          if (!isBarbwire) {
+            queue.add((neighbor, newDistance));
+          }
+        } else if (newDistance <= actualMoveOnly) {
           moveOnlyHexes.add(neighbor);
-          queue.add((neighbor, newDistance));
+          // If barbwire, don't add to queue (movement stops)
+          if (!isBarbwire) {
+            queue.add((neighbor, newDistance));
+          }
         }
       }
     }

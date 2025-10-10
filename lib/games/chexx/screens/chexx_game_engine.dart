@@ -142,10 +142,12 @@ class ChexxGameEngine extends GameEngineBase {
       // Select unit if it belongs to current player
       if (unitAtPosition.owner == chexxGameState.currentPlayer) {
         // In card mode with hex_tiles restriction, only allow selecting units in allowed hexes
+        // If hex_tiles is "all", "none", or null, no filtering is applied
         if (chexxGameState.gameMode == 'card' &&
             chexxGameState.isCardActionActive &&
             chexxGameState.activeCardActionHexTiles != null &&
-            chexxGameState.activeCardActionHexTiles != 'none') {
+            chexxGameState.activeCardActionHexTiles != 'none' &&
+            chexxGameState.activeCardActionHexTiles != 'all') {
           final allowedHexes = chexxGameState.getHexesForThird(chexxGameState.activeCardActionHexTiles!);
           if (!allowedHexes.contains(hexCoord)) {
             print('Cannot select unit - hex_tiles restriction: ${chexxGameState.activeCardActionHexTiles}');
@@ -303,6 +305,9 @@ class ChexxGameEngine extends GameEngineBase {
                 final destroyedPosition = unitAtPosition.position;
                 chexxGameState.simpleUnits.remove(unitAtPosition);
                 print('${unitAtPosition.unitType} destroyed!');
+
+                // Award point to the attacking player
+                chexxGameState.awardPoints(selectedUnit.owner, 1);
 
                 // Combat movement: Infantry and Armor gain movement points but don't auto-move
                 // ONLY if the killed enemy was adjacent (distance 1)
@@ -539,6 +544,10 @@ class ChexxGameEngine extends GameEngineBase {
         if (isInMoveAndFire || isInMoveOnly) {
           // Calculate actual movement cost for this hex
           final distance = selectedUnit.position.distanceTo(hexCoord);
+
+          // Track if this was a move-only movement (for card mode logic)
+          chexxGameState.lastMoveWasMoveOnly = isInMoveOnly && !isInMoveAndFire;
+
           // Create new unit with updated position and reduced movement
           final updatedUnit = SimpleGameUnit(
             id: selectedUnit.id,
@@ -557,7 +566,7 @@ class ChexxGameEngine extends GameEngineBase {
           if (index != -1) {
             chexxGameState.simpleUnits[index] = updatedUnit;
           }
-          print('Moved unit to: $hexCoord');
+          print('Moved unit to: $hexCoord (move-only: ${chexxGameState.lastMoveWasMoveOnly})');
 
           // Clear targeted enemy and wayfinding highlights after moving
           chexxGameState.targetedEnemy = null;

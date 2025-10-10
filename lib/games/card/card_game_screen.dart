@@ -39,6 +39,10 @@ class _CardGameScreenState extends State<CardGameScreen> {
   // Sub-step tracking
   Map<int, int> actionCurrentSubStep = {}; // Track current sub-step index for each action
   Map<int, Set<int>> actionCompletedSubSteps = {}; // Track completed sub-steps for each action
+  Map<int, Set<int>> actionCancelledSubSteps = {}; // Track cancelled sub-steps for each action
+
+  // Unit usage tracking per card
+  Set<String> usedUnitIds = {}; // Track units that have been used for actions on the current card
 
   @override
   void initState() {
@@ -344,6 +348,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       chexxState.attackRangeHexes.clear();
       chexxState.highlightedHexes.clear();
       chexxState.activeCardActionHexTiles = null;
+      chexxState.lastMoveWasMoveOnly = false;
       chexxState.targetedEnemy = null;
 
       // Deselect all units
@@ -355,9 +360,46 @@ class _CardGameScreenState extends State<CardGameScreen> {
       print('Cleared all hex highlights after playing card');
     }
 
+    // Check if any actions on this card have valid units
+    bool anyActionHasUnits = false;
+    if (card.card.actions != null && card.card.actions!.isNotEmpty) {
+      for (int i = 0; i < card.card.actions!.length; i++) {
+        if (_actionHasValidUnitsForNewCard(card.card.actions![i])) {
+          anyActionHasUnits = true;
+          break;
+        }
+      }
+    }
+
+    // If no actions have valid units, replace with a fallback action
+    if (!anyActionHasUnits && _chexxGameEngine != null) {
+      print('No valid units for any action on this card - using fallback action');
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      final currentPlayer = chexxState.currentPlayer;
+
+      // Check if player has any units at all
+      final hasAnyUnits = chexxState.simpleUnits.any((unit) => unit.owner == currentPlayer);
+
+      if (hasAnyUnits) {
+        // Replace card actions with a single fallback action
+        card.card.actions = [
+          {
+            'name': 'Select Unit',
+            'hex_tiles': 'all',
+            'sub_steps': ['unit_selection'],
+          }
+        ];
+        print('Replaced card actions with fallback action');
+      }
+    }
+
     setState(() {
       playedCard = card;
       completedActions.clear();
+      actionCurrentSubStep.clear();
+      actionCompletedSubSteps.clear();
+      actionCancelledSubSteps.clear();
+      usedUnitIds.clear(); // Clear unit usage tracking for new card
       activeActionIndex = null;
       selectedCard = null; // Clear selection
       allActionsComplete = false; // Reset for new card
@@ -498,20 +540,28 @@ class _CardGameScreenState extends State<CardGameScreen> {
                           final subStep = subEntry.value;
                           final currentSubStep = actionCurrentSubStep[index] ?? 0;
                           final completedSubSteps = actionCompletedSubSteps[index] ?? {};
+                          final cancelledSubSteps = actionCancelledSubSteps[index] ?? {};
                           final isSubCompleted = completedSubSteps.contains(subIndex);
-                          final isSubActive = currentSubStep == subIndex && !isSubCompleted;
+                          final isSubCancelled = cancelledSubSteps.contains(subIndex);
+                          final isSubActive = currentSubStep == subIndex && !isSubCompleted && !isSubCancelled;
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 2),
                             child: Row(
                               children: [
                                 Icon(
-                                  isSubCompleted ? Icons.check_box : Icons.check_box_outline_blank,
+                                  isSubCompleted
+                                      ? Icons.check_box
+                                      : isSubCancelled
+                                          ? Icons.cancel
+                                          : Icons.check_box_outline_blank,
                                   color: isSubActive
                                       ? Colors.yellow
                                       : isSubCompleted
                                           ? Colors.grey
-                                          : Colors.white60,
+                                          : isSubCancelled
+                                              ? Colors.red.shade400
+                                              : Colors.white60,
                                   size: 12,
                                 ),
                                 const SizedBox(width: 4),
@@ -523,10 +573,12 @@ class _CardGameScreenState extends State<CardGameScreen> {
                                           ? Colors.yellow
                                           : isSubCompleted
                                               ? Colors.grey
-                                              : Colors.white60,
+                                              : isSubCancelled
+                                                  ? Colors.red.shade400
+                                                  : Colors.white60,
                                       fontSize: 8,
                                       fontWeight: isSubActive ? FontWeight.bold : FontWeight.normal,
-                                      decoration: isSubCompleted ? TextDecoration.lineThrough : null,
+                                      decoration: (isSubCompleted || isSubCancelled) ? TextDecoration.lineThrough : null,
                                       backgroundColor: isSubActive ? Colors.yellow.withOpacity(0.2) : null,
                                     ),
                                   ),
@@ -536,6 +588,61 @@ class _CardGameScreenState extends State<CardGameScreen> {
                           );
                         }).toList(),
                       ),
+                    ),
+                  ],
+                  // Barbwire decision buttons (shown after BEFORE COMBAT MOVEMENT when waiting for decision)
+                  if (isActive && _chexxGameEngine != null) ...[
+                    Builder(
+                      builder: (context) {
+                        final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+                        if (chexxState.isWaitingForBarbwireDecision) {
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
+                            child: Row(
+                              children: [
+                                // Remove Barbwire button
+                                SizedBox(
+                                  height: 20,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      if (chexxState.onBarbwireRemove != null) {
+                                        chexxState.onBarbwireRemove!();
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red.shade700,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      minimumSize: const Size(0, 20),
+                                    ),
+                                    child: const Text('Remove Barbwire', style: TextStyle(fontSize: 9)),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                // Keep Barbwire button
+                                SizedBox(
+                                  height: 20,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      if (chexxState.onBarbwireKeep != null) {
+                                        chexxState.onBarbwireKeep!();
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade700,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      minimumSize: const Size(0, 20),
+                                    ),
+                                    child: const Text('Keep Barbwire', style: TextStyle(fontSize: 9)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
                     ),
                   ],
                 ],
@@ -577,6 +684,11 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       // Set up sub-step tracking callbacks
       chexxState.onUnitSelected = () {
+        // Track that this unit has been used for an action on this card
+        if (chexxState.activeCardActionUnitId != null) {
+          usedUnitIds.add(chexxState.activeCardActionUnitId!);
+          print('Unit ${chexxState.activeCardActionUnitId} added to used units: $usedUnitIds');
+        }
         _advanceSubStep(actionIndex, 'unit_selection');
       };
 
@@ -593,13 +705,79 @@ class _CardGameScreenState extends State<CardGameScreen> {
           }
         }
 
-        _advanceSubStep(actionIndex, 'before_combat_movement');
-        // Lock the unit after movement - combat must use same unit
-        chexxState.isCardActionUnitLocked = true;
-        // Clear wayfinding to prevent further movement before combat
-        chexxState.moveAndFireHexes.clear();
-        chexxState.moveOnlyHexes.clear();
-        print('Unit locked after movement - combat must use same unit');
+        // Check if unit moved onto barbwire
+        final selectedUnit = chexxState.simpleUnits.firstWhere(
+          (u) => u.isSelected,
+          orElse: () => throw Exception('No selected unit'),
+        );
+
+        bool onBarbwire = false;
+        GameStructure? barbwireStructure;
+        for (final structure in chexxState.placedStructures) {
+          if (structure.position.q == selectedUnit.position.q &&
+              structure.position.r == selectedUnit.position.r &&
+              structure.position.s == selectedUnit.position.s) {
+            final structureType = structure.type.name.toLowerCase();
+            if (structureType == 'barbwire' || structureType == 'barbed_wire') {
+              onBarbwire = true;
+              barbwireStructure = structure;
+              break;
+            }
+          }
+        }
+
+        if (onBarbwire && barbwireStructure != null) {
+          // Unit moved onto barbwire - set up decision callbacks
+          chexxState.isWaitingForBarbwireDecision = true;
+          chexxState.barbwireDecisionHex = selectedUnit.position;
+
+          chexxState.onBarbwireRemove = () {
+            _handleBarbwireRemove(actionIndex, selectedUnit, barbwireStructure!);
+          };
+
+          chexxState.onBarbwireKeep = () {
+            _handleBarbwireKeep(actionIndex);
+          };
+
+          setState(() {}); // Refresh UI to show buttons
+          print('Unit on barbwire - waiting for decision');
+        } else {
+          // Normal movement completion
+          _advanceSubStep(actionIndex, 'before_combat_movement');
+
+          // Check if this was a move-only movement (beyond move_and_fire range)
+          if (chexxState.lastMoveWasMoveOnly) {
+            // Unit moved beyond fire range - auto-complete combat and after-combat movement
+            print('Move-only movement detected - auto-completing combat and after-combat movement');
+            _advanceSubStep(actionIndex, 'combat');
+            _advanceSubStep(actionIndex, 'after_combat_movement');
+          } else {
+            // Unit moved within fire range - check if there are any enemies in attack range
+            chexxState.calculateAttackRange(selectedUnit);
+            final hasEnemiesInRange = chexxState.attackRangeHexes.isNotEmpty;
+
+            if (!hasEnemiesInRange) {
+              // No enemies in range - auto-complete combat substep
+              print('No enemies in attack range - auto-completing combat substep');
+              _advanceSubStep(actionIndex, 'combat');
+
+              // Check if we should auto-complete after-combat movement
+              final moveAfterCombatBonus = action['move_after_combat'] as int? ?? 0;
+              if (moveAfterCombatBonus == 0 && selectedUnit.moveAfterCombat == 0) {
+                // No special movement values - auto-complete after-combat movement
+                print('No after-combat movement - auto-completing after_combat_movement substep');
+                _advanceSubStep(actionIndex, 'after_combat_movement');
+              }
+            } else {
+              // Lock the unit after movement - combat must use same unit
+              chexxState.isCardActionUnitLocked = true;
+              // Clear wayfinding to prevent further movement before combat
+              chexxState.moveAndFireHexes.clear();
+              chexxState.moveOnlyHexes.clear();
+              print('Unit locked after movement - combat must use same unit');
+            }
+          }
+        }
       };
 
       chexxState.onCombatOccurred = () {
@@ -617,6 +795,18 @@ class _CardGameScreenState extends State<CardGameScreen> {
           }
         }
         _advanceSubStep(actionIndex, 'combat');
+
+        // Check if we should auto-complete after-combat movement
+        final selectedUnit = chexxState.simpleUnits.firstWhere(
+          (u) => u.isSelected,
+          orElse: () => throw Exception('No selected unit'),
+        );
+        final moveAfterCombatBonus = action['move_after_combat'] as int? ?? 0;
+        if (moveAfterCombatBonus == 0 && selectedUnit.moveAfterCombat == 0) {
+          // No special movement values - auto-complete after-combat movement
+          print('No after-combat movement available - auto-completing after_combat_movement substep');
+          _advanceSubStep(actionIndex, 'after_combat_movement');
+        }
       };
 
       chexxState.onAfterCombatMovement = () {
@@ -630,7 +820,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
       chexxState.activeCardActionHexTiles = hexTiles;
 
       // Get allowed hexes based on hex_tiles restriction
-      final allowedHexes = (hexTiles != null && hexTiles != 'none')
+      // If hex_tiles is "all", "none", or null, no filtering is applied
+      final allowedHexes = (hexTiles != null && hexTiles != 'none' && hexTiles != 'all')
           ? chexxState.getHexesForThird(hexTiles)
           : null;
 
@@ -640,6 +831,11 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       for (final unit in chexxState.simpleUnits) {
         if (unit.owner == currentPlayer) {
+          // Skip units that have already been used for an action on this card
+          if (usedUnitIds.contains(unit.id)) {
+            continue;
+          }
+
           // If hex_tiles restriction exists, only add units in allowed hexes
           if (allowedHexes == null || allowedHexes.contains(unit.position)) {
             playerUnitHexes.add(unit.position);
@@ -699,6 +895,128 @@ class _CardGameScreenState extends State<CardGameScreen> {
     });
   }
 
+  void _handleBarbwireRemove(int actionIndex, SimpleGameUnit unit, GameStructure barbwireStructure) {
+    if (!mounted) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+
+    // Remove the barbwire structure from the game
+    chexxState.placedStructures.remove(barbwireStructure);
+    print('Barbwire removed at position ${barbwireStructure.position}');
+
+    // Clear barbwire decision state
+    chexxState.isWaitingForBarbwireDecision = false;
+    chexxState.barbwireDecisionHex = null;
+    chexxState.onBarbwireRemove = null;
+    chexxState.onBarbwireKeep = null;
+
+    // Advance the before_combat_movement substep
+    _advanceSubStep(actionIndex, 'before_combat_movement');
+
+    // Check if unit is infantry
+    if (unit.unitType.toLowerCase() == 'infantry') {
+      // Infantry that removes barbwire ends its action immediately
+      print('Infantry removed barbwire - cancelling remaining substeps');
+
+      // Mark all remaining substeps as cancelled
+      final action = playedCard.card.actions![actionIndex];
+      final subSteps = action['sub_steps'] as List?;
+      if (subSteps != null) {
+        final completedSteps = actionCompletedSubSteps[actionIndex] ?? {};
+        final cancelledSteps = actionCancelledSubSteps[actionIndex] ?? <int>{};
+
+        for (int i = 0; i < subSteps.length; i++) {
+          // Cancel substeps that haven't been completed yet
+          if (!completedSteps.contains(i)) {
+            cancelledSteps.add(i);
+          }
+        }
+
+        actionCancelledSubSteps[actionIndex] = cancelledSteps;
+      }
+
+      // Complete the action
+      _completeAction(actionIndex);
+    } else {
+      // Non-infantry units continue normally after removing barbwire
+      final action = playedCard.card.actions![actionIndex];
+
+      // Check if there are any enemies in attack range
+      chexxState.calculateAttackRange(unit);
+      final hasEnemiesInRange = chexxState.attackRangeHexes.isNotEmpty;
+
+      if (!hasEnemiesInRange) {
+        // No enemies in range - auto-complete combat substep
+        print('No enemies in attack range after barbwire removal - auto-completing combat substep');
+        _advanceSubStep(actionIndex, 'combat');
+
+        // Check if we should auto-complete after-combat movement
+        final moveAfterCombatBonus = action['move_after_combat'] as int? ?? 0;
+        if (moveAfterCombatBonus == 0 && unit.moveAfterCombat == 0) {
+          // No special movement values - auto-complete after-combat movement
+          print('No after-combat movement - auto-completing after_combat_movement substep');
+          _advanceSubStep(actionIndex, 'after_combat_movement');
+        }
+      } else {
+        chexxState.isCardActionUnitLocked = true;
+        chexxState.moveAndFireHexes.clear();
+        chexxState.moveOnlyHexes.clear();
+      }
+    }
+
+    _chexxGameEngine!.notifyListeners();
+    setState(() {});
+  }
+
+  void _handleBarbwireKeep(int actionIndex) {
+    if (!mounted) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+
+    // Clear barbwire decision state
+    chexxState.isWaitingForBarbwireDecision = false;
+    chexxState.barbwireDecisionHex = null;
+    chexxState.onBarbwireRemove = null;
+    chexxState.onBarbwireKeep = null;
+
+    // Continue with normal movement completion
+    _advanceSubStep(actionIndex, 'before_combat_movement');
+
+    // Get the selected unit
+    final selectedUnit = chexxState.simpleUnits.firstWhere(
+      (u) => u.isSelected,
+      orElse: () => throw Exception('No selected unit'),
+    );
+
+    final action = playedCard.card.actions![actionIndex];
+
+    // Check if there are any enemies in attack range
+    chexxState.calculateAttackRange(selectedUnit);
+    final hasEnemiesInRange = chexxState.attackRangeHexes.isNotEmpty;
+
+    if (!hasEnemiesInRange) {
+      // No enemies in range - auto-complete combat substep
+      print('No enemies in attack range after keeping barbwire - auto-completing combat substep');
+      _advanceSubStep(actionIndex, 'combat');
+
+      // Check if we should auto-complete after-combat movement
+      final moveAfterCombatBonus = action['move_after_combat'] as int? ?? 0;
+      if (moveAfterCombatBonus == 0 && selectedUnit.moveAfterCombat == 0) {
+        // No special movement values - auto-complete after-combat movement
+        print('No after-combat movement - auto-completing after_combat_movement substep');
+        _advanceSubStep(actionIndex, 'after_combat_movement');
+      }
+    } else {
+      chexxState.isCardActionUnitLocked = true;
+      chexxState.moveAndFireHexes.clear();
+      chexxState.moveOnlyHexes.clear();
+      print('Barbwire kept - continuing with action');
+    }
+
+    _chexxGameEngine!.notifyListeners();
+    setState(() {});
+  }
+
   void _completeAction(int actionIndex) {
     // Restore original unit attributes
     _restoreOriginalAttributes();
@@ -716,22 +1034,109 @@ class _CardGameScreenState extends State<CardGameScreen> {
         chexxState.activeCardActionUnitId = null;
         chexxState.isCardActionUnitLocked = false;
         chexxState.isWaitingForAfterCombatMovement = false;
+        chexxState.isWaitingForBarbwireDecision = false;
+        chexxState.barbwireDecisionHex = null;
+        chexxState.lastMoveWasMoveOnly = false;
         // Clear sub-step callbacks
         chexxState.onUnitSelected = null;
         chexxState.onUnitMoved = null;
         chexxState.onCombatOccurred = null;
         chexxState.onAfterCombatMovement = null;
+        chexxState.onBarbwireRemove = null;
+        chexxState.onBarbwireKeep = null;
         _chexxGameEngine!.notifyListeners();
       }
 
-      // Check if all actions are complete
+      // Check if remaining actions have any valid units available
       final totalActions = playedCard.card.actions?.length ?? 0;
+      final remainingActionIndices = List.generate(totalActions, (i) => i)
+          .where((i) => !completedActions.contains(i))
+          .toList();
+
+      if (remainingActionIndices.isNotEmpty) {
+        // Check if any remaining action has valid units
+        bool anyActionHasValidUnits = false;
+
+        for (final i in remainingActionIndices) {
+          if (_actionHasValidUnits(i)) {
+            anyActionHasValidUnits = true;
+            break;
+          }
+        }
+
+        if (!anyActionHasValidUnits) {
+          // No valid units for remaining actions - auto-complete them
+          print('No valid units available for remaining actions - auto-completing all remaining actions');
+          for (final i in remainingActionIndices) {
+            completedActions.add(i);
+            // Mark all substeps as cancelled for these actions
+            final action = playedCard.card.actions![i];
+            final subSteps = action['sub_steps'] as List?;
+            if (subSteps != null) {
+              final cancelledSteps = actionCancelledSubSteps[i] ?? <int>{};
+              for (int j = 0; j < subSteps.length; j++) {
+                cancelledSteps.add(j);
+              }
+              actionCancelledSubSteps[i] = cancelledSteps;
+            }
+          }
+        }
+      }
+
+      // Check if all actions are complete
       if (completedActions.length >= totalActions) {
         // All actions complete - mark as ready but keep card visible until END TURN
         allActionsComplete = true;
         print('All card actions complete - card will remain visible until END TURN');
       }
     });
+  }
+
+  /// Check if an action has any valid units available (excluding already used units)
+  bool _actionHasValidUnits(int actionIndex) {
+    if (_chexxGameEngine == null) return false;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+    final currentPlayer = chexxState.currentPlayer;
+    final action = playedCard.card.actions![actionIndex];
+
+    return _checkActionHasValidUnits(action, chexxState, currentPlayer);
+  }
+
+  /// Check if a specific action object has valid units (used when checking before card is played)
+  bool _actionHasValidUnitsForNewCard(dynamic action) {
+    if (_chexxGameEngine == null) return false;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+    final currentPlayer = chexxState.currentPlayer;
+
+    return _checkActionHasValidUnits(action, chexxState, currentPlayer);
+  }
+
+  /// Helper method to check if an action has valid units
+  bool _checkActionHasValidUnits(dynamic action, ChexxGameState chexxState, Player currentPlayer) {
+    // Get hex_tiles restriction for this action
+    final hexTiles = action['hex_tiles'] as String?;
+    final allowedHexes = (hexTiles != null && hexTiles != 'none' && hexTiles != 'all')
+        ? chexxState.getHexesForThird(hexTiles)
+        : null;
+
+    // Check if any units are available for this action
+    for (final unit in chexxState.simpleUnits) {
+      if (unit.owner == currentPlayer) {
+        // Skip units that have already been used
+        if (usedUnitIds.contains(unit.id)) {
+          continue;
+        }
+
+        // Check if unit is in allowed hexes
+        if (allowedHexes == null || allowedHexes.contains(unit.position)) {
+          return true; // Found a valid unit
+        }
+      }
+    }
+
+    return false; // No valid units found
   }
 
   void _applySpecialAttributes(dynamic action) {
@@ -946,6 +1351,10 @@ class _CardGameScreenState extends State<CardGameScreen> {
       selectedCard = null; // Clear selected card for next turn
       playedCard = null;
       completedActions.clear();
+      actionCurrentSubStep.clear();
+      actionCompletedSubSteps.clear();
+      actionCancelledSubSteps.clear();
+      usedUnitIds.clear(); // Clear unit usage tracking for next turn
       allActionsComplete = false; // Reset button color for next turn
       activeActionIndex = null;
     });
