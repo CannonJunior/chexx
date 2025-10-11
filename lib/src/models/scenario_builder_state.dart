@@ -430,17 +430,29 @@ class ScenarioBuilderState extends ChangeNotifier {
 
   /// Increment health of the selected unit (if incrementable)
   bool incrementSelectedUnitHealth() {
-    if (selectedPlacedUnit == null) return false;
+    print('DEBUG STATE: incrementSelectedUnitHealth called');
+    if (selectedPlacedUnit == null) {
+      print('DEBUG STATE: No unit selected');
+      return false;
+    }
 
     final unit = selectedPlacedUnit!;
     final isIncrementable = _isIncrementableTemplate(unit.template);
+    print('DEBUG STATE: Unit template: ${unit.template.id}, isIncrementable: $isIncrementable');
 
-    if (!isIncrementable) return false;
+    if (!isIncrementable) {
+      print('DEBUG STATE: Unit is not incrementable');
+      return false;
+    }
 
     final currentHealth = unit.customHealth ?? _getStartingHealthForTemplate(unit.template);
     final maxHealth = _getMaxHealthForTemplate(unit.template);
+    print('DEBUG STATE: Current health: $currentHealth, Max health: $maxHealth');
 
-    if (currentHealth >= maxHealth) return false; // Already at max
+    if (currentHealth >= maxHealth) {
+      print('DEBUG STATE: Already at max health');
+      return false; // Already at max
+    }
 
     // Remove old unit and add with incremented health
     placedUnits.remove(unit);
@@ -454,23 +466,36 @@ class ScenarioBuilderState extends ChangeNotifier {
     // Update selected unit reference
     selectedPlacedUnit = newUnit;
 
+    print('DEBUG STATE: Health incremented to ${currentHealth + 1}');
     notifyListeners();
     return true;
   }
 
   /// Decrement health of the selected unit (if incrementable and above starting health)
   bool decrementSelectedUnitHealth() {
-    if (selectedPlacedUnit == null) return false;
+    print('DEBUG STATE: decrementSelectedUnitHealth called');
+    if (selectedPlacedUnit == null) {
+      print('DEBUG STATE: No unit selected');
+      return false;
+    }
 
     final unit = selectedPlacedUnit!;
     final isIncrementable = _isIncrementableTemplate(unit.template);
+    print('DEBUG STATE: Unit template: ${unit.template.id}, isIncrementable: $isIncrementable');
 
-    if (!isIncrementable) return false;
+    if (!isIncrementable) {
+      print('DEBUG STATE: Unit is not incrementable');
+      return false;
+    }
 
     final currentHealth = unit.customHealth ?? _getStartingHealthForTemplate(unit.template);
     final startingHealth = _getStartingHealthForTemplate(unit.template);
+    print('DEBUG STATE: Current health: $currentHealth, Starting health: $startingHealth');
 
-    if (currentHealth <= startingHealth) return false; // Already at starting health
+    if (currentHealth <= startingHealth) {
+      print('DEBUG STATE: Already at starting health');
+      return false; // Already at starting health
+    }
 
     // Remove old unit and add with decremented health
     placedUnits.remove(unit);
@@ -484,6 +509,7 @@ class ScenarioBuilderState extends ChangeNotifier {
     // Update selected unit reference
     selectedPlacedUnit = newUnit;
 
+    print('DEBUG STATE: Health decremented to ${currentHealth - 1}');
     notifyListeners();
     return true;
   }

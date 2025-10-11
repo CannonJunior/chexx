@@ -1047,43 +1047,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
         _chexxGameEngine!.notifyListeners();
       }
 
-      // Check if remaining actions have any valid units available
-      final totalActions = playedCard.card.actions?.length ?? 0;
-      final remainingActionIndices = List.generate(totalActions, (i) => i)
-          .where((i) => !completedActions.contains(i))
-          .toList();
-
-      if (remainingActionIndices.isNotEmpty) {
-        // Check if any remaining action has valid units
-        bool anyActionHasValidUnits = false;
-
-        for (final i in remainingActionIndices) {
-          if (_actionHasValidUnits(i)) {
-            anyActionHasValidUnits = true;
-            break;
-          }
-        }
-
-        if (!anyActionHasValidUnits) {
-          // No valid units for remaining actions - auto-complete them
-          print('No valid units available for remaining actions - auto-completing all remaining actions');
-          for (final i in remainingActionIndices) {
-            completedActions.add(i);
-            // Mark all substeps as cancelled for these actions
-            final action = playedCard.card.actions![i];
-            final subSteps = action['sub_steps'] as List?;
-            if (subSteps != null) {
-              final cancelledSteps = actionCancelledSubSteps[i] ?? <int>{};
-              for (int j = 0; j < subSteps.length; j++) {
-                cancelledSteps.add(j);
-              }
-              actionCancelledSubSteps[i] = cancelledSteps;
-            }
-          }
-        }
-      }
-
       // Check if all actions are complete
+      final totalActions = playedCard.card.actions?.length ?? 0;
       if (completedActions.length >= totalActions) {
         // All actions complete - mark as ready but keep card visible until END TURN
         allActionsComplete = true;
@@ -1301,19 +1266,59 @@ class _CardGameScreenState extends State<CardGameScreen> {
   }
 
   void _endTurn() {
-    // If there's a played card with incomplete actions, show error
+    // If there's a played card with incomplete actions, check if they can be auto-completed
     if (playedCard != null) {
       final totalActions = playedCard.card.actions?.length ?? 0;
       if (completedActions.length < totalActions) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Complete all card actions (${completedActions.length}/$totalActions done)'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
-          ),
-        );
-        return;
+        // Get remaining action indices
+        final remainingActionIndices = List.generate(totalActions, (i) => i)
+            .where((i) => !completedActions.contains(i))
+            .toList();
+
+        // Auto-complete actions that have no valid units
+        final actionsToAutoComplete = <int>[];
+        for (final i in remainingActionIndices) {
+          if (!_actionHasValidUnits(i)) {
+            actionsToAutoComplete.add(i);
+          }
+        }
+
+        if (actionsToAutoComplete.isNotEmpty) {
+          print('Auto-completing ${actionsToAutoComplete.length} actions with no valid units at end of turn');
+          setState(() {
+            for (final i in actionsToAutoComplete) {
+              completedActions.add(i);
+              // Mark all substeps as cancelled for these actions
+              final action = playedCard.card.actions![i];
+              final subSteps = action['sub_steps'] as List?;
+              if (subSteps != null) {
+                final cancelledSteps = actionCancelledSubSteps[i] ?? <int>{};
+                for (int j = 0; j < subSteps.length; j++) {
+                  cancelledSteps.add(j);
+                }
+                actionCancelledSubSteps[i] = cancelledSteps;
+              }
+            }
+
+            // Check if all actions are now complete
+            if (completedActions.length >= totalActions) {
+              allActionsComplete = true;
+            }
+          });
+        }
+
+        // If there are still incomplete actions that COULD be done, show error
+        if (completedActions.length < totalActions) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Complete all card actions (${completedActions.length}/$totalActions done)'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.only(top: 80, left: 20, right: 20),
+            ),
+          );
+          return;
+        }
       }
 
       // Discard the completed card now

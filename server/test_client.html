@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chexx WebSocket Test Client</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #fff;
+        }
+        h1 {
+            color: #4fc3f7;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .connected {
+            background: #2e7d32;
+        }
+        .disconnected {
+            background: #c62828;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background: #4fc3f7;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #29b6f6;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #messages {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 5px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4fc3f7;
+            padding-left: 10px;
+        }
+        .message.sent {
+            border-left-color: #66bb6a;
+        }
+        .message.received {
+            border-left-color: #42a5f5;
+        }
+        .message.error {
+            border-left-color: #ef5350;
+        }
+        .timestamp {
+            color: #999;
+            font-size: 10px;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 60%;
+            border: none;
+            border-radius: 5px;
+            background: #16213e;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Chexx WebSocket Test Client</h1>
+
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div class="controls">
+        <button id="connectBtn" onclick="connect()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        <button onclick="sendPing()" disabled id="pingBtn">Send PING</button>
+        <button onclick="sendEcho()" disabled id="echoBtn">Send ECHO</button>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="customMessage" placeholder="Enter custom message JSON" />
+        <button onclick="sendCustom()" disabled id="sendBtn">Send Custom</button>
+    </div>
+
+    <div id="messages"></div>
+
+    <script>
+        let ws = null;
+        let clientId = null;
+
+        function connect() {
+            const url = 'ws://localhost:8888/ws';
+            addMessage('Connecting to ' + url + '...', 'system');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    addMessage('WebSocket connected!', 'system');
+                    updateStatus(true);
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        if (data.type === 'CONNECTED') {
+                            clientId = data.clientId;
+                            addMessage('Received CONNECTED: ' + JSON.stringify(data, null, 2), 'received');
+                        } else {
+                            addMessage('Received: ' + JSON.stringify(data, null, 2), 'received');
+                        }
+                    } catch (e) {
+                        addMessage('Received (raw): ' + event.data, 'received');
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    addMessage('WebSocket error: ' + error, 'error');
+                };
+
+                ws.onclose = () => {
+                    addMessage('WebSocket disconnected', 'system');
+                    updateStatus(false);
+                };
+            } catch (e) {
+                addMessage('Error connecting: ' + e.message, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendPing() {
+            const message = {
+                type: 'PING',
+                timestamp: Date.now()
+            };
+            sendMessage(message);
+        }
+
+        function sendEcho() {
+            const message = {
+                type: 'ECHO',
+                payload: 'Hello from test client!',
+                timestamp: Date.now()
+            };
+            sendMessage(message);
+        }
+
+        function sendCustom() {
+            const input = document.getElementById('customMessage');
+            try {
+                const message = JSON.parse(input.value);
+                sendMessage(message);
+                input.value = '';
+            } catch (e) {
+                addMessage('Invalid JSON: ' + e.message, 'error');
+            }
+        }
+
+        function sendMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const json = JSON.stringify(message);
+                ws.send(json);
+                addMessage('Sent: ' + JSON.stringify(message, null, 2), 'sent');
+            } else {
+                addMessage('Not connected!', 'error');
+            }
+        }
+
+        function addMessage(text, type = 'system') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + type;
+
+            const timestamp = new Date().toLocaleTimeString();
+            messageDiv.innerHTML = '<span class="timestamp">' + timestamp + '</span><br>' +
+                                   text.replace(/\n/g, '<br>');
+
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const pingBtn = document.getElementById('pingBtn');
+            const echoBtn = document.getElementById('echoBtn');
+            const sendBtn = document.getElementById('sendBtn');
+
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = 'Connected (Client ID: ' + (clientId || 'pending...') + ')';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                pingBtn.disabled = false;
+                echoBtn.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                pingBtn.disabled = true;
+                echoBtn.disabled = true;
+                sendBtn.disabled = true;
+                clientId = null;
+            }
+        }
+
+        // Add some helpful examples
+        addMessage('WebSocket Test Client ready!', 'system');
+        addMessage('Click "Connect" to connect to the server', 'system');
+        addMessage('Example custom messages:', 'system');
+        addMessage('{"type": "PING"}', 'system');
+        addMessage('{"type": "ECHO", "payload": "test message"}', 'system');
+    </script>
+</body>
+</html>

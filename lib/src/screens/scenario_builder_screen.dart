@@ -1183,23 +1183,33 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     );
   }
 
-  void _handleKeyEvent(KeyEvent event) {
+  KeyEventResult _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
       final key = event.logicalKey;
 
       // Handle health increment/decrement with arrow keys
       if (key == LogicalKeyboardKey.arrowUp) {
+        print('DEBUG: Arrow UP pressed - attempting to increment health');
         if (builderState.incrementSelectedUnitHealth()) {
           setState(() {}); // Update UI
+          print('DEBUG: Health incremented successfully');
+          return KeyEventResult.handled;
+        } else {
+          print('DEBUG: Health increment failed - selectedPlacedUnit: ${builderState.selectedPlacedUnit}');
+          return KeyEventResult.ignored;
         }
-        return;
       }
 
       if (key == LogicalKeyboardKey.arrowDown) {
+        print('DEBUG: Arrow DOWN pressed - attempting to decrement health');
         if (builderState.decrementSelectedUnitHealth()) {
           setState(() {}); // Update UI
+          print('DEBUG: Health decremented successfully');
+          return KeyEventResult.handled;
+        } else {
+          print('DEBUG: Health decrement failed - selectedPlacedUnit: ${builderState.selectedPlacedUnit}');
+          return KeyEventResult.ignored;
         }
-        return;
       }
 
       // Handle cursor movement with QWEASD keys
@@ -1211,8 +1221,11 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           key == LogicalKeyboardKey.keyD) {
         builderState.moveCursor(key.keyLabel.toLowerCase());
         setState(() {}); // Update UI
+        return KeyEventResult.handled;
       }
     }
+
+    return KeyEventResult.ignored;
   }
 
   void _handleBoardTap(Offset globalPosition) {

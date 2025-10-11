@@ -6,6 +6,7 @@ import 'core/engine/game_plugin_manager.dart';
 import 'games/chexx/chexx_plugin.dart';
 import 'games/card/card_plugin.dart';
 import 'src/screens/scenario_builder_screen.dart';
+import 'network/multiplayer_test_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -358,6 +359,28 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   'How to Play',
                   style: TextStyle(
                     color: Colors.white70,
+                    fontSize: 16,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Multiplayer Test
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const MultiplayerTestScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.wifi, color: Colors.blue),
+                label: const Text(
+                  'Multiplayer Test',
+                  style: TextStyle(
+                    color: Colors.blue,
                     fontSize: 16,
                     decoration: TextDecoration.underline,
                   ),

@@ -16,6 +16,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   f_card_engine:
     path: ../f-card
+  web_socket_channel: ^3.0.0
+  chexx_shared_models:
+    path: server/shared_models
 
 dev_dependencies:
   flutter_test:
