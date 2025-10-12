@@ -1,0 +1,54 @@
+{
+  "id": "card_12",
+  "name": "Move Out",
+  "description": "Issue an order 4 INFANTRY units. Terrain movement and battle restrictions still apply. If you do not command any infantry units, issue an order to 1 unit of your choice.",
+  "cost": 1,
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

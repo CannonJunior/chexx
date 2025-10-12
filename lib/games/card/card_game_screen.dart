@@ -688,6 +688,14 @@ class _CardGameScreenState extends State<CardGameScreen> {
         if (chexxState.activeCardActionUnitId != null) {
           usedUnitIds.add(chexxState.activeCardActionUnitId!);
           print('Unit ${chexxState.activeCardActionUnitId} added to used units: $usedUnitIds');
+
+          // Apply card overrides to the selected unit
+          final success = chexxState.applyCardEffectsToUnit(chexxState.activeCardActionUnitId!, action);
+          if (success) {
+            print('Successfully applied card overrides to unit ${chexxState.activeCardActionUnitId}');
+          } else {
+            print('WARNING: Failed to apply card overrides to unit ${chexxState.activeCardActionUnitId}');
+          }
         }
         _advanceSubStep(actionIndex, 'unit_selection');
       };
@@ -825,15 +833,28 @@ class _CardGameScreenState extends State<CardGameScreen> {
           ? chexxState.getHexesForThird(hexTiles)
           : null;
 
-      // Highlight hexes with current player's units (filtered by hex_tiles if applicable)
+      // Highlight hexes with current player's units (filtered by hex_tiles and unit_restrictions)
       final currentPlayer = chexxState.currentPlayer;
       final playerUnitHexes = <core_hex.HexCoordinate>{};
+
+      // Get unit_restrictions from action
+      final unitRestriction = action['unit_restrictions'] as String?;
 
       for (final unit in chexxState.simpleUnits) {
         if (unit.owner == currentPlayer) {
           // Skip units that have already been used for an action on this card
           if (usedUnitIds.contains(unit.id)) {
             continue;
+          }
+
+          // Check unit_restrictions filter
+          if (unitRestriction != null && unitRestriction.isNotEmpty && unitRestriction.toLowerCase() != 'all') {
+            final restrictionLower = unitRestriction.toLowerCase();
+            final unitTypeLower = unit.unitType.toLowerCase();
+            if (!unitTypeLower.contains(restrictionLower)) {
+              // Unit doesn't match restriction - skip it
+              continue;
+            }
           }
 
           // If hex_tiles restriction exists, only add units in allowed hexes

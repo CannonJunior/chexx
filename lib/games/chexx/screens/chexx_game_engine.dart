@@ -71,8 +71,18 @@ class ChexxGameEngine extends GameEngineBase {
   void handleTap(Offset position, Size canvasSize) {
     final chexxGameState = gameState as ChexxGameState;
 
+    print('DEBUG TAP: Screen position: $position, Canvas size: $canvasSize');
+
     // Convert screen position to hex coordinate using current orientation
     final hexCoord = _screenToHex(position, canvasSize);
+
+    print('DEBUG TAP: Calculated hex coordinate: $hexCoord');
+
+    // Log all unit positions for debugging
+    print('DEBUG TAP: All unit positions:');
+    for (final unit in chexxGameState.simpleUnits) {
+      print('  - ${unit.id} (${unit.unitType}, owner=${unit.owner.name}): ${unit.position}');
+    }
 
     if (hexCoord != null) {
       handleHexTap(hexCoord);
@@ -131,14 +141,20 @@ class ChexxGameEngine extends GameEngineBase {
 
     // Find unit at this position using simple loop
     SimpleGameUnit? unitAtPosition;
+    print('DEBUG LOOKUP: Looking for unit at hex coordinate: $hexCoord');
     for (final unit in chexxGameState.simpleUnits) {
+      print('DEBUG LOOKUP: Checking unit ${unit.id} at ${unit.position}, match: ${unit.position == hexCoord}');
       if (unit.position == hexCoord) {
         unitAtPosition = unit;
+        print('DEBUG LOOKUP: FOUND MATCH! Unit: ${unit.id}');
         break;
       }
     }
+    print('DEBUG LOOKUP: Final result: ${unitAtPosition?.id ?? "null"}');
 
     if (unitAtPosition != null) {
+      print('DEBUG CLICK: Clicked on hex $hexCoord, found unit: ${unitAtPosition.id} at ${unitAtPosition.position}');
+
       // Select unit if it belongs to current player
       if (unitAtPosition.owner == chexxGameState.currentPlayer) {
         // In card mode with hex_tiles restriction, only allow selecting units in allowed hexes
@@ -205,23 +221,23 @@ class ChexxGameEngine extends GameEngineBase {
         chexxGameState.targetedEnemy = null;
         // Select this unit
         unitAtPosition.isSelected = true;
-        print('Selected unit: ${unitAtPosition.id}');
+        print('DEBUG SELECT: Selected unit: ${unitAtPosition.id} (${unitAtPosition.unitType}) at ${unitAtPosition.position}');
 
         // In card mode, track which unit is performing the action
         if (chexxGameState.gameMode == 'card' && chexxGameState.isCardActionActive) {
           chexxGameState.activeCardActionUnitId = unitAtPosition.id;
-          print('Card action: Selected unit ${unitAtPosition.id} for action');
+          print('DEBUG SELECT: Card action - Set activeCardActionUnitId to ${unitAtPosition.id}');
         }
 
-        // Calculate wayfinding for the selected unit
-        chexxGameState.calculateWayfinding(unitAtPosition);
-
-        // Calculate attack range for the selected unit
-        chexxGameState.calculateAttackRange(unitAtPosition);
-
         // Notify card game if in card mode (unit selected)
+        // This callback will apply overrides and recalculate wayfinding/attack range
         if (chexxGameState.gameMode == 'card' && chexxGameState.onUnitSelected != null) {
           chexxGameState.onUnitSelected!();
+        } else {
+          // Only calculate wayfinding/attack if NOT in card action mode
+          // (card action mode handles this after applying overrides)
+          chexxGameState.calculateWayfinding(unitAtPosition);
+          chexxGameState.calculateAttackRange(unitAtPosition);
         }
 
         notifyListeners();

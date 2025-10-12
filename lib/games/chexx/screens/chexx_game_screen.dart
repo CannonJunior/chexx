@@ -248,7 +248,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
             right: 16,
             child: Column(
               children: [
-                _buildUnitInfoPanel(_getSelectedUnit(gameState)!),
+                _buildUnitInfoPanel(_getSelectedUnit(gameState)!, gameState),
                 Container(
                   margin: const EdgeInsets.only(top: 8),
                   child: _buildTileInfoPanel(_getSelectedUnit(gameState)!, gameState),
@@ -486,7 +486,7 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     return null;
   }
 
-  Widget _buildUnitInfoPanel(SimpleGameUnit unit) {
+  Widget _buildUnitInfoPanel(SimpleGameUnit unit, ChexxGameState gameState) {
     return Container(
       width: 200,
       padding: const EdgeInsets.all(12),
@@ -538,9 +538,9 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
 
           // Unit stats
           _buildStatRow('Health', '${unit.health}/${unit.maxHealth}', Icons.favorite),
-          _buildStatRow('Movement', '${unit.remainingMovement}/${_getMovementRange(unit.unitType)}', Icons.directions_run),
-          _buildStatRow('Attack Range', '${_getAttackRange(unit.unitType)}', Icons.gps_fixed),
-          _buildStatRow('Attack Damage', '${_getAttackDamage(unit.unitType)}', Icons.flash_on),
+          _buildStatRow('Movement', '${unit.remainingMovement}/${_getMovementRange(unit, gameState)}', Icons.directions_run),
+          _buildStatRow('Attack Range', '${_getAttackRange(unit, gameState)}', Icons.gps_fixed),
+          _buildStatRow('Attack Damage', '${_getAttackDamage(unit, gameState)}', Icons.flash_on),
 
           const SizedBox(height: 8),
 
@@ -598,8 +598,17 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     }
   }
 
-  int _getMovementRange(String unitType) {
-    switch (unitType.toLowerCase()) {
+  int _getMovementRange(SimpleGameUnit unit, ChexxGameState gameState) {
+    // Check for overrides first
+    if (gameState.unitOverrides.containsKey(unit.id)) {
+      final overrides = gameState.unitOverrides[unit.id]!;
+      if (overrides.containsKey('movement_range')) {
+        return overrides['movement_range'] as int;
+      }
+    }
+
+    // Fall back to base values
+    switch (unit.unitType.toLowerCase()) {
       // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 3;
@@ -613,8 +622,17 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     }
   }
 
-  int _getAttackRange(String unitType) {
-    switch (unitType.toLowerCase()) {
+  int _getAttackRange(SimpleGameUnit unit, ChexxGameState gameState) {
+    // Check for overrides first
+    if (gameState.unitOverrides.containsKey(unit.id)) {
+      final overrides = gameState.unitOverrides[unit.id]!;
+      if (overrides.containsKey('attack_range')) {
+        return overrides['attack_range'] as int;
+      }
+    }
+
+    // Fall back to base values
+    switch (unit.unitType.toLowerCase()) {
       // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 3;
@@ -628,8 +646,22 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
     }
   }
 
-  int _getAttackDamage(String unitType) {
-    switch (unitType.toLowerCase()) {
+  int _getAttackDamage(SimpleGameUnit unit, ChexxGameState gameState) {
+    // Check for overrides first
+    if (gameState.unitOverrides.containsKey(unit.id)) {
+      final overrides = gameState.unitOverrides[unit.id]!;
+      if (overrides.containsKey('attack_damage')) {
+        final damage = overrides['attack_damage'];
+        // Handle array format from card JSON
+        if (damage is List) {
+          return (damage as List).cast<int>().fold(0, (sum, d) => sum + d);
+        }
+        return damage as int;
+      }
+    }
+
+    // Fall back to base values
+    switch (unit.unitType.toLowerCase()) {
       // CHEXX unit types
       case 'minor': return 1;
       case 'scout': return 1;

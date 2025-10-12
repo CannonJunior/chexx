@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'hex_coordinate.dart';
 import 'game_unit.dart';
 import 'game_board.dart';
@@ -472,6 +474,12 @@ class GameState extends ChangeNotifier {
       } else {
         player2Rewards += timeBonus.round();
       }
+    }
+
+    // Clear temporary overrides from all units (from card effects, etc.)
+    print('DEBUG: Clearing all unit overrides at end of turn');
+    for (final unit in units) {
+      unit.clearOverrides();
     }
 
     // Update all unit cooldowns
@@ -1009,5 +1017,70 @@ class GameState extends ChangeNotifier {
       'units_can_order_remaining': unitsCanOrderRemaining,
       'units_ordered_this_turn': _unitsOrderedThisTurn,
     };
+  }
+
+  // ========== CARD EFFECT APPLICATION ==========
+
+  /// Apply card effects to a unit based on card action definition
+  /// This handles "overrides" from card JSON to temporarily modify unit attributes
+  bool applyCardEffectsToUnit(GameUnit unit, Map<String, dynamic> cardAction) {
+    print('DEBUG: Attempting to apply card effects to unit ${unit.id}');
+    print('DEBUG: Card action: $cardAction');
+
+    // Check unit restrictions
+    final unitRestriction = cardAction['unit_restrictions'] as String?;
+    if (!unit.matchesUnitRestriction(unitRestriction)) {
+      print('DEBUG: Unit ${unit.id} (${unit.unitTypeId}) does not match restriction: $unitRestriction');
+      return false;
+    }
+
+    print('DEBUG: Unit ${unit.id} matches restriction: $unitRestriction');
+
+    // Get overrides from card action
+    final overrides = cardAction['overrides'] as Map<String, dynamic>?;
+    if (overrides == null || overrides.isEmpty) {
+      print('DEBUG: No overrides found in card action');
+      return false;
+    }
+
+    print('DEBUG: Applying overrides to unit ${unit.id}: $overrides');
+
+    // Apply overrides to unit
+    unit.applyOverrides(overrides);
+
+    print('DEBUG: Successfully applied card effects to unit ${unit.id}');
+    print('DEBUG: Unit now has: movement_range=${unit.movementRange}, attack_damage=${unit.attackDamage}, move_and_fire=${unit.moveAndFire}, move_after_combat=${unit.moveAfterCombat}');
+
+    return true;
+  }
+
+  /// Get all units that match a card's unit restrictions
+  /// Returns list of units that can be targeted by this card action
+  List<GameUnit> getUnitsMatchingRestriction(String? restriction) {
+    return currentPlayerUnits.where((unit) =>
+      unit.matchesUnitRestriction(restriction)
+    ).toList();
+  }
+
+  /// Apply card effects from a card ID (loads card from assets)
+  Future<bool> applyCardEffectsFromCardId(GameUnit unit, String cardId) async {
+    try {
+      // Load card JSON from assets
+      final cardJson = await rootBundle.loadString('assets/cards/$cardId.json');
+      final cardData = jsonDecode(cardJson) as Map<String, dynamic>;
+
+      // Get first action (cards can have multiple actions)
+      final actions = cardData['actions'] as List<dynamic>?;
+      if (actions == null || actions.isEmpty) {
+        print('DEBUG: No actions found in card $cardId');
+        return false;
+      }
+
+      final firstAction = actions.first as Map<String, dynamic>;
+      return applyCardEffectsToUnit(unit, firstAction);
+    } catch (e) {
+      print('ERROR: Failed to load/apply card $cardId: $e');
+      return false;
+    }
   }
 }

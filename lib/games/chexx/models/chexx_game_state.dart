@@ -154,6 +154,9 @@ class ChexxGameState extends GameStateBase {
   Map<String, bool> unitCanSpecialAttack = {}; // Track which tanks can currently make special attack (after overrun)
   Map<String, int> unitMoveAfterCombatBonus = {}; // Track temporary move_after_combat bonuses from card actions
 
+  // Card effect overrides - temporary attribute modifications from cards (cleared at end of turn)
+  Map<String, Map<String, dynamic>> unitOverrides = {}; // unitId -> {attribute -> value}
+
   @override
   void initializeGame() {
     gamePhase = GamePhase.playing;
@@ -224,6 +227,12 @@ class ChexxGameState extends GameStateBase {
 
   @override
   void endTurn() {
+    // Clear card effect overrides for all units (effects last only one turn)
+    if (unitOverrides.isNotEmpty) {
+      print('DEBUG: Clearing ${unitOverrides.length} unit override(s) at end of turn');
+      unitOverrides.clear();
+    }
+
     // Reset movement for all units of the next player
     _resetPlayerMovement();
 
@@ -779,12 +788,14 @@ class ChexxGameState extends GameStateBase {
 
   /// Calculate reachable hexes for a unit using BFS pathfinding
   void calculateWayfinding(SimpleGameUnit unit, {int? moveAndFireBonus, int? moveOnlyBonus}) {
+    print('DEBUG WAYFINDING: Calculating for unit ${unit.id} (${unit.unitType}) at position ${unit.position}');
     moveAndFireHexes.clear();
     moveOnlyHexes.clear();
 
-    // Get unit's movement stats from unit type config
-    final baseMoveAndFire = _getUnitMoveAndFire(unit.unitType);
-    final baseMoveOnly = _getUnitMoveOnly(unit.unitType);
+    // Get unit's movement stats from unit type config (check overrides first)
+    final baseMoveAndFire = _getUnitMoveAndFire(unit.unitType, unitId: unit.id);
+    final baseMoveOnly = _getUnitMoveOnly(unit.unitType, unitId: unit.id);
+    print('DEBUG WAYFINDING: baseMoveAndFire=$baseMoveAndFire, baseMoveOnly=$baseMoveOnly (overrides: ${unitOverrides[unit.id]})');
 
     // Use the lesser of remaining movement or base movement capability
     final moveAndFire = baseMoveAndFire.clamp(0, unit.remainingMovement);
@@ -879,8 +890,8 @@ class ChexxGameState extends GameStateBase {
   void calculateAttackRange(SimpleGameUnit unit) {
     attackRangeHexes.clear();
 
-    final attackRange = _getUnitAttackRange(unit.unitType);
-    final baseDamage = _getUnitBaseDamage(unit.unitType);
+    final attackRange = _getUnitAttackRange(unit.unitType, unitId: unit.id);
+    final baseDamage = _getUnitBaseDamage(unit.unitType, unitId: unit.id);
 
     // Find all enemy units within attack range
     for (final targetUnit in simpleUnits) {
@@ -896,7 +907,16 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Get unit attack range
-  int _getUnitAttackRange(String unitType) {
+  int _getUnitAttackRange(String unitType, {String? unitId}) {
+    // Check for unit-specific overrides first
+    if (unitId != null && unitOverrides.containsKey(unitId)) {
+      final overrides = unitOverrides[unitId]!;
+      if (overrides.containsKey('attack_range')) {
+        return overrides['attack_range'] as int;
+      }
+    }
+
+    // Fall back to base values
     switch (unitType) {
       // WWII unit types
       case 'infantry': return 3;
@@ -912,7 +932,21 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Get base damage for unit type
-  int _getUnitBaseDamage(String unitType) {
+  int _getUnitBaseDamage(String unitType, {String? unitId}) {
+    // Check for unit-specific overrides first
+    if (unitId != null && unitOverrides.containsKey(unitId)) {
+      final overrides = unitOverrides[unitId]!;
+      if (overrides.containsKey('attack_damage')) {
+        final damage = overrides['attack_damage'];
+        // Handle array format from card JSON
+        if (damage is List) {
+          return damage.cast<int>().fold(0, (sum, d) => sum + d) ~/ damage.length;
+        }
+        return damage as int;
+      }
+    }
+
+    // Fall back to base values
     switch (unitType) {
       // WWII unit types
       case 'infantry': return 2; // Average of [3, 2, 1]
@@ -931,7 +965,7 @@ class ChexxGameState extends GameStateBase {
   int _calculateExpectedDamage(SimpleGameUnit attacker, SimpleGameUnit defender, int distance) {
     // For now, return base damage
     // Could be enhanced to factor in distance, terrain, etc.
-    return _getUnitBaseDamage(attacker.unitType);
+    return _getUnitBaseDamage(attacker.unitType, unitId: attacker.id);
   }
 
   /// Get adjacent hexes to a given hex
@@ -1113,7 +1147,16 @@ class ChexxGameState extends GameStateBase {
     return maxHealth;
   }
 
-  int _getUnitMovement(String unitType) {
+  int _getUnitMovement(String unitType, {String? unitId}) {
+    // Check for unit-specific overrides first
+    if (unitId != null && unitOverrides.containsKey(unitId)) {
+      final overrides = unitOverrides[unitId]!;
+      if (overrides.containsKey('movement_range')) {
+        return overrides['movement_range'] as int;
+      }
+    }
+
+    // Fall back to base values
     switch (unitType) {
       case 'minor': return 1;
       case 'scout': return 3;
@@ -1128,7 +1171,16 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Get move_and_fire value for unit type (how far unit can move and still attack)
-  int _getUnitMoveAndFire(String unitType) {
+  int _getUnitMoveAndFire(String unitType, {String? unitId}) {
+    // Check for unit-specific overrides first
+    if (unitId != null && unitOverrides.containsKey(unitId)) {
+      final overrides = unitOverrides[unitId]!;
+      if (overrides.containsKey('move_and_fire')) {
+        return overrides['move_and_fire'] as int;
+      }
+    }
+
+    // Fall back to base values
     switch (unitType) {
       case 'infantry': return 1;
       case 'armor': return 3;
@@ -1143,7 +1195,16 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Get move_only value for unit type (how far unit can move without attacking)
-  int _getUnitMoveOnly(String unitType) {
+  int _getUnitMoveOnly(String unitType, {String? unitId}) {
+    // Check for unit-specific overrides first
+    if (unitId != null && unitOverrides.containsKey(unitId)) {
+      final overrides = unitOverrides[unitId]!;
+      if (overrides.containsKey('move_only')) {
+        return overrides['move_only'] as int;
+      }
+    }
+
+    // Fall back to base values
     switch (unitType) {
       case 'infantry': return 2;
       case 'armor': return 3;
@@ -1286,6 +1347,72 @@ class ChexxGameState extends GameStateBase {
     retreatHexes.clear();
     isWaitingForRetreat = false;
     notifyListeners();
+  }
+
+  /// Apply card effects (overrides) to a specific unit
+  /// Returns true if successful, false if unit doesn't match restrictions
+  bool applyCardEffectsToUnit(String unitId, Map<String, dynamic> cardAction) {
+    print('DEBUG APPLY: applyCardEffectsToUnit called for unitId=$unitId');
+
+    // Find the unit
+    final unit = simpleUnits.firstWhere(
+      (u) => u.id == unitId,
+      orElse: () => throw Exception('Unit not found: $unitId'),
+    );
+    print('DEBUG APPLY: Found unit: ${unit.id} (${unit.unitType}) at position ${unit.position}');
+
+    // Check unit restrictions
+    final unitRestriction = cardAction['unit_restrictions'] as String?;
+    if (unitRestriction != null && unitRestriction.isNotEmpty && unitRestriction.toLowerCase() != 'all') {
+      final restrictionLower = unitRestriction.toLowerCase();
+      final unitTypeLower = unit.unitType.toLowerCase();
+
+      // Check if unit type contains the restriction string
+      if (!unitTypeLower.contains(restrictionLower)) {
+        print('DEBUG APPLY: Unit ${unit.id} (${unit.unitType}) does not match restriction: $unitRestriction');
+        return false;
+      }
+    }
+
+    // Get overrides from card action
+    final overrides = cardAction['overrides'] as Map<String, dynamic>?;
+    if (overrides == null || overrides.isEmpty) {
+      print('DEBUG APPLY: No overrides found in card action');
+      return false;
+    }
+
+    // Store overrides for this unit
+    unitOverrides[unitId] = Map<String, dynamic>.from(overrides);
+    print('DEBUG APPLY: Applied card overrides to unit $unitId: $overrides');
+    print('DEBUG APPLY: About to call calculateWayfinding for unit ${unit.id} at ${unit.position}');
+
+    // Recalculate movement for this unit
+    calculateWayfinding(unit);
+    calculateAttackRange(unit);
+
+    notifyListeners();
+    return true;
+  }
+
+  /// Get units that match a unit restriction filter
+  List<SimpleGameUnit> getUnitsMatchingRestriction(String? restriction, Player player) {
+    if (restriction == null || restriction.isEmpty || restriction.toLowerCase() == 'all') {
+      return simpleUnits.where((u) => u.owner == player).toList();
+    }
+
+    final restrictionLower = restriction.toLowerCase();
+    return simpleUnits.where((u) {
+      return u.owner == player && u.unitType.toLowerCase().contains(restrictionLower);
+    }).toList();
+  }
+
+  /// Clear overrides for a specific unit
+  void clearUnitOverrides(String unitId) {
+    if (unitOverrides.containsKey(unitId)) {
+      print('DEBUG: Clearing overrides for unit $unitId');
+      unitOverrides.remove(unitId);
+      notifyListeners();
+    }
   }
 
   /// Get hexes for a specific third (loaded from scenario)

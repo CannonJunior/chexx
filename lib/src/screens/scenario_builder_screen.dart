@@ -1016,16 +1016,16 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
                       '• Click board to place selected unit',
                     ),
                     _buildInstructionItem(
-                      '• Double-click hex to toggle Meta',
+                      '• Deselect palette (click it again)',
                     ),
                     _buildInstructionItem(
-                      '• Click placed unit to view info',
+                      '• Then click placed unit to select',
                     ),
                     _buildInstructionItem(
-                      '• ↑/↓ arrows: increment/decrement health',
+                      '• ↑/↓ arrows: adjust health (1 to max)',
                     ),
                     _buildInstructionItem(
-                      '• Click again on selected unit to remove',
+                      '• Select palette & click unit to remove',
                     ),
 
                     const Spacer(),
@@ -1190,24 +1190,34 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       // Handle health increment/decrement with arrow keys
       if (key == LogicalKeyboardKey.arrowUp) {
         print('DEBUG: Arrow UP pressed - attempting to increment health');
+        print('DEBUG: selectedPlacedUnit: ${builderState.selectedPlacedUnit?.template.id}');
+        print('DEBUG: selectedUnitTemplate: ${builderState.selectedUnitTemplate?.id}');
         if (builderState.incrementSelectedUnitHealth()) {
           setState(() {}); // Update UI
           print('DEBUG: Health incremented successfully');
           return KeyEventResult.handled;
         } else {
-          print('DEBUG: Health increment failed - selectedPlacedUnit: ${builderState.selectedPlacedUnit}');
+          print('DEBUG: Health increment FAILED - Make sure:');
+          print('  1. No template is selected in palette (click palette again to deselect)');
+          print('  2. Click on a placed unit to select it for modification');
+          print('  3. Then use arrow keys to adjust health');
           return KeyEventResult.ignored;
         }
       }
 
       if (key == LogicalKeyboardKey.arrowDown) {
         print('DEBUG: Arrow DOWN pressed - attempting to decrement health');
+        print('DEBUG: selectedPlacedUnit: ${builderState.selectedPlacedUnit?.template.id}');
+        print('DEBUG: selectedUnitTemplate: ${builderState.selectedUnitTemplate?.id}');
         if (builderState.decrementSelectedUnitHealth()) {
           setState(() {}); // Update UI
           print('DEBUG: Health decremented successfully');
           return KeyEventResult.handled;
         } else {
-          print('DEBUG: Health decrement failed - selectedPlacedUnit: ${builderState.selectedPlacedUnit}');
+          print('DEBUG: Health decrement FAILED - Make sure:');
+          print('  1. No template is selected in palette (click palette again to deselect)');
+          print('  2. Click on a placed unit to select it for modification');
+          print('  3. Then use arrow keys to adjust health');
           return KeyEventResult.ignored;
         }
       }
@@ -1241,11 +1251,17 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     );
 
     final hexCoord = _screenToHex(adjustedPosition, renderBox.size);
-    if (hexCoord == null) return;
+    if (hexCoord == null) {
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
+      return;
+    }
 
     // Handle removal mode - removes everything from the hex
     if (builderState.isRemoveMode) {
       builderState.placeItem(hexCoord); // Use placeItem which handles remove mode properly
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
 
@@ -1258,15 +1274,21 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         final placedUnit = builderState.getPlacedUnitAt(hexCoord);
         if (placedUnit != null && builderState.selectedPlacedUnit != placedUnit) {
           builderState.selectPlacedUnit(placedUnit);
+          // Re-request focus to ensure keyboard input continues working
+          _focusNode.requestFocus();
           return;
         }
         // Second click (or if already selected): remove existing unit
         builderState.removeUnit(hexCoord);
         builderState.selectPlacedUnit(null); // Clear selection when removing
+        // Re-request focus to ensure keyboard input continues working
+        _focusNode.requestFocus();
         return;
       }
       // Place new unit on empty hex
       builderState.placeItem(hexCoord);
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
 
@@ -1276,6 +1298,8 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       if (existingStructure != null) {
         // Remove existing structure
         builderState.removeStructure(hexCoord);
+        // Re-request focus to ensure keyboard input continues working
+        _focusNode.requestFocus();
         return;
       }
 
@@ -1283,11 +1307,15 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       final placedUnit = builderState.getPlacedUnitAt(hexCoord);
       if (placedUnit != null) {
         builderState.selectPlacedUnit(placedUnit);
+        // Re-request focus to ensure keyboard input continues working
+        _focusNode.requestFocus();
         return;
       }
 
       // Place new structure on empty hex
       builderState.placeItem(hexCoord);
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
 
@@ -1299,6 +1327,8 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       final placedUnit = builderState.getPlacedUnitAt(hexCoord);
       if (placedUnit != null) {
         builderState.selectPlacedUnit(placedUnit);
+        // Re-request focus to ensure keyboard input continues working
+        _focusNode.requestFocus();
         return;
       }
 
@@ -1309,12 +1339,16 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
         // Place or change tile type
         builderState.placeItem(hexCoord);
       }
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
 
     if (builderState.isCreateNewMode) {
       // Create new hex mode
       builderState.placeItem(hexCoord);
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
 
@@ -1327,6 +1361,9 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
       // Clear selection if clicking on empty space
       builderState.selectPlacedUnit(null);
     }
+
+    // Re-request focus to ensure keyboard input continues working
+    _focusNode.requestFocus();
   }
 
   /// Handle pan start - detect if user is starting to drag a vertical line
@@ -1355,12 +1392,16 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
     const tapThreshold = 20.0;
     if ((adjustedPosition.dx - leftLineScreenX).abs() < tapThreshold) {
       builderState.startDraggingLine(DraggingLine.leftLine, adjustedPosition.dx);
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
 
     // Check if tap is near right line (within 20 pixels)
     if ((adjustedPosition.dx - rightLineScreenX).abs() < tapThreshold) {
       builderState.startDraggingLine(DraggingLine.rightLine, adjustedPosition.dx);
+      // Re-request focus to ensure keyboard input continues working
+      _focusNode.requestFocus();
       return;
     }
   }
@@ -1391,6 +1432,8 @@ class _ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
   void _handlePanEnd(DragEndDetails details) {
     if (builderState.currentlyDraggedLine == null) return;
     builderState.endDraggingLine();
+    // Re-request focus to ensure keyboard input continues working
+    _focusNode.requestFocus();
   }
 
   HexCoordinate? _screenToHex(Offset screenPos, Size canvasSize) {

@@ -51,6 +51,10 @@ class GameUnit {
   // Status effects
   Map<String, int> statusEffects;
 
+  // Temporary attribute overrides (from cards, abilities, etc.)
+  // These are cleared at the end of each turn
+  Map<String, dynamic> _tempOverrides;
+
   GameUnit({
     required this.id,
     required this.unitTypeId,
@@ -64,7 +68,8 @@ class GameUnit {
   }) : maxHealth = customHealth ?? config.health,
        currentHealth = customHealth ?? config.health,
        abilityCooldowns = {},
-       statusEffects = {};
+       statusEffects = {},
+       _tempOverrides = {};
 
   /// Check if unit is alive
   bool get isAlive => currentHealth > 0;
@@ -75,14 +80,27 @@ class GameUnit {
   /// Check if unit can attack
   bool get canAttack => isAlive && state != UnitState.dead;
 
-  /// Get movement range based on unit configuration
-  int get movementRange => config.movementRange;
+  /// Get movement range based on unit configuration (with overrides)
+  int get movementRange => _tempOverrides['movement_range'] as int? ?? config.movementRange;
 
-  /// Get attack range based on unit configuration
-  int get attackRange => config.attackRange;
+  /// Get attack range based on unit configuration (with overrides)
+  int get attackRange => _tempOverrides['attack_range'] as int? ?? config.attackRange;
 
-  /// Get attack damage based on unit configuration
+  /// Get attack damage based on unit configuration (with overrides)
   int get attackDamage {
+    // Check for override first
+    final overrideDamage = _tempOverrides['attack_damage'];
+    if (overrideDamage != null) {
+      if (overrideDamage is List) {
+        // For WWII units with array attack damage
+        final List<int> damageArray = (overrideDamage as List).cast<int>();
+        return damageArray.fold(0, (sum, damage) => sum + damage);
+      } else {
+        return overrideDamage as int;
+      }
+    }
+
+    // Use config value
     if (config.attackDamage is List<int>) {
       // For WWII units with array attack damage, return the sum as equivalent damage
       final List<int> damageArray = config.attackDamage as List<int>;
@@ -91,6 +109,15 @@ class GameUnit {
       return config.attackDamage as int;
     }
   }
+
+  /// Get move_and_fire value (with overrides) - movement after attack
+  int get moveAndFire => _tempOverrides['move_and_fire'] as int? ?? (config.special?['move_and_fire'] as int? ?? 0);
+
+  /// Get move_after_combat value (with overrides) - movement after combat
+  int get moveAfterCombat => _tempOverrides['move_after_combat'] as int? ?? (config.special?['move_after_combat'] as int? ?? 0);
+
+  /// Get move_only value (with overrides)
+  int get moveOnly => _tempOverrides['move_only'] as int? ?? (config.special?['move_only'] as int? ?? movementRange);
 
   /// Check if unit can move to target position
   bool canMoveTo(HexCoordinate target, List<GameUnit> allUnits) {
@@ -371,6 +398,52 @@ class GameUnit {
     useAbility('long_range_scan', 4);
     return true;
   }
+
+  /// Apply temporary attribute overrides from card action
+  /// These last for the duration of the current turn
+  void applyOverrides(Map<String, dynamic> overrides) {
+    print('DEBUG: Applying overrides to unit $id: $overrides');
+    _tempOverrides.addAll(overrides);
+    print('DEBUG: Unit $id now has overrides: $_tempOverrides');
+  }
+
+  /// Clear all temporary overrides (called at end of turn)
+  void clearOverrides() {
+    if (_tempOverrides.isNotEmpty) {
+      print('DEBUG: Clearing overrides from unit $id: $_tempOverrides');
+      _tempOverrides.clear();
+    }
+  }
+
+  /// Check if this unit matches a unit restriction filter
+  /// Restriction can be:
+  /// - "infantry" - matches infantry unit type
+  /// - "armor" - matches armor unit type
+  /// - "scout" - matches scout unit type
+  /// - "minor" - matches minor unit type
+  /// - "artillery" - matches artillery unit type
+  /// - "all" - matches all units
+  bool matchesUnitRestriction(String? restriction) {
+    if (restriction == null || restriction.isEmpty || restriction.toLowerCase() == 'all') {
+      return true; // No restriction or "all" means any unit can be selected
+    }
+
+    final restrictionLower = restriction.toLowerCase();
+    final unitTypeLower = unitTypeId.toLowerCase();
+
+    // Check if unit type contains the restriction string
+    // This handles cases like:
+    // - "infantry" matches "p1_infantry", "p2_infantry"
+    // - "scout" matches "p1_scout", "p2_scout"
+    // - "armor" matches "p1_armor", "p2_armor"
+    return unitTypeLower.contains(restrictionLower);
+  }
+
+  /// Get current overrides (for debugging)
+  Map<String, dynamic> get currentOverrides => Map.unmodifiable(_tempOverrides);
+
+  /// Check if unit has any active overrides
+  bool get hasOverrides => _tempOverrides.isNotEmpty;
 
   @override
   String toString() => 'GameUnit($id, $unitTypeId, $owner, $position, HP:$currentHealth/$maxHealth)';

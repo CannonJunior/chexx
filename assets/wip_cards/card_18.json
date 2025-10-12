@@ -1,0 +1,49 @@
+{
+  "id": "card_18",
+  "name": "Dig-In",
+  "description": "Issue an order 4 INFANTRY units. The units improve their position by placing an available sandbag on the units' hexes. If you do not command any infantry units, issue an order to 1 unit of your choice.",
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "combat",
+        "place sandbag"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "combat",
+        "place sandbag"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "combat",
+        "place sandbag"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "combat",
+        "place sandbag"
+      ]
+    }
+  ]
+}
