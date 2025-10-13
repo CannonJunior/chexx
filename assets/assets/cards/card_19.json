@@ -1,0 +1,49 @@
+{
+  "id": "card_19",
+  "name": "Firefight",
+  "description": "Issue an order 4 units to open fire. Units in a firefight may not be adjacent to an enemy unit, and may not move. Firefighting units roll 1 additional die.",
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": "none",
+      "hex_tiles": "not adjacent",
+      "battle_die": "+1",
+      "sub_steps": [
+        "unit_selection",
+        "combat"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "none",
+      "hex_tiles": "not adjacent",
+      "battle_die": "+1",
+      "sub_steps": [
+        "unit_selection",
+        "combat"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "none",
+      "hex_tiles": "not adjacent",
+      "battle_die": "+1",
+      "sub_steps": [
+        "unit_selection",
+        "combat"
+      ]
+    },
+    {
+      "action_type": "order",
+      "unit_restrictions": "none",
+      "hex_tiles": "not adjacent",
+      "battle_die": "+1",
+      "sub_steps": [
+        "unit_selection",
+        "combat"
+      ]
+    }
+  ]
+}

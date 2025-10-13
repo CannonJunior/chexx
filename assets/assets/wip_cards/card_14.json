@@ -1,0 +1,20 @@
+{
+  "id": "card_14",
+  "name": "Artillery Bombard",
+  "description": "Issue an order to all ARTILLERY units. Units may move up to 3 hexes or battle twice. If you do not commmand any artillery units, issua and order to 1 unit of your choice",
+  "type": "all",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": "artillery",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "combat"
+      ]
+    }
+  ]
+}

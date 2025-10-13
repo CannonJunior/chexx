@@ -1,0 +1,58 @@
+{
+  "id": "card_10",
+  "name": "Direct From HQ",
+  "description": "Issue an order 4 units of your choice.",
+  "cost": 1,
+  "type": "defense",
+  "attributes": {
+    "power": 3,
+    "rarity": "common"
+  },
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "all",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

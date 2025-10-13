@@ -1,0 +1,22 @@
+{
+  "id": "card_22",
+  "name": "Air Power",
+  "description": "Target a group of 4 or fewer enemy units adjacent to each other. Roll 2 battle die per hex (Allied air attack) or 1 per hex (Axis air attack), ignoring any terrain battle die reduction. Score 1 hit for each die that matches the unit's symbol, a grenade or a start. Fore each flag, retreat 1 hex. Flags may not be ignored.",
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "Air Power",
+      "unit_restrictions": "adjacent",
+      "hex_tiles": "up to 4",
+      "overrides": {
+        "attack_damage": [
+          2
+	]
+      },
+      "sub_steps": [
+        "combat"
+      ]
+    }
+  ]
+}
