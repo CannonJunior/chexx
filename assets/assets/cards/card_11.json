@@ -1,0 +1,31 @@
+{
+  "id": "card_11",
+  "name": "Infantry Assault",
+  "description": "Issue an order to all Infantry units in 1 section. Units may move up to 2 hexes and still battle, or move 3 hexes but not battle. Terrain movement and battle restrictions still apply. If you do not command any infantry units, issue an order to 1 unit of your choice.",
+  "type": "all",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "overrides": {
+        "name": "Infantry",
+        "movement_range": 3,
+        "move_and_fire": 2,
+        "move_only": 3,
+        "movement_type": "adjacent",
+        "is_incrementable": true,
+        "symbol": "I",
+        "game_type": "wwii",
+        "description": "Infantry Assault"
+      },
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

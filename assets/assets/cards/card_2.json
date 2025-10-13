@@ -1,0 +1,58 @@
+{
+  "id": "card_2",
+  "name": "Pincer Move",
+  "description": "Issue an order 2 units on the Left Flank and 2 units on the Right Flank.",
+  "cost": 8,
+  "type": "support",
+  "attributes": {
+    "power": 5,
+    "rarity": "common"
+  },
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "left third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+     {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "left third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "right third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "right third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

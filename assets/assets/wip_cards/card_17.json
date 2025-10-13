@@ -1,0 +1,20 @@
+{
+  "id": "card_17",
+  "name": "Close Assault",
+  "description": "Issue an order to all INFANTRY and/or ARMOR units adjacent to enemy units. Units ordered battle with 1 additional die. Units may not move before they battle, but, after a successful Close Assault, they make Take Ground an Armor units my make an Armore Overrun.",
+  "type": "all",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": ["infantry", "armor"],
+      "hex_tiles": "adjacent to enemy units",
+      "battle_die": "+1",
+      "sub_steps": [
+        "unit_selection",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

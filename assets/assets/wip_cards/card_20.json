@@ -1,0 +1,21 @@
+{
+  "id": "card_20",
+  "name": "Medics & Mechanics",
+  "description": "Issue an order to 1 unit that has suffered casualties. Roll 1 battle die for each command card you have, including this card. For each die matching the unit's symobl or star, 1 lost figure of that unit is retrieved to duty. A unit may not gain more figures than it originally had. If the unit recovers at least 1 figure, it may also be issued an order.",
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "unit_restrictions": "infantry",
+      "hex_tiles": "all",
+      "special": "heal",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

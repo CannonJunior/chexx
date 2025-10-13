@@ -156,6 +156,10 @@ flutter --version
 cd "$(dirname "$0")"
 print_status "Working directory: $(pwd)"
 
+# Check and kill any process using port 8888 BEFORE doing anything else
+print_status "Ensuring port 8888 is available..."
+check_and_kill_port_8888
+
 # Check for required files
 if [[ ! -f "pubspec.yaml" ]]; then
     print_error "pubspec.yaml not found. Please run this script from the CHEXX project directory."
@@ -211,9 +215,6 @@ case $choice in
         if command -v google-chrome &> /dev/null; then
             print_status "Starting Flutter web server for Chrome..."
 
-            # Check and kill any process using port 8888
-            check_and_kill_port_8888
-
             # Start the server in the background
             flutter run -d web-server --web-port=8888 --web-hostname=localhost --release &
             SERVER_PID=$!
@@ -242,9 +243,6 @@ case $choice in
             wait $SERVER_PID
         else
             print_warning "Chrome not found, using default web browser"
-
-            # Check and kill any process using port 8888
-            check_and_kill_port_8888
 
             flutter run -d web-server --web-port=8888 --web-hostname=localhost --release
         fi

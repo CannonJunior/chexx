@@ -1,0 +1,22 @@
+{
+  "id": "card_15",
+  "name": "Barrage",
+  "description": "Target any 1 enemy unit. Roll 4 battle dice, ignoring any terrain battle die restriction. Score 1 hit for each die matching the unit's symbol or grenade. For each flag, retreat 1 hex. Flags may not be ignored.",
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "barrage",
+      "unit_restrictions": "none",
+      "hex_tiles": "all",
+      "overrides": {
+        "attack_damage": [
+          4
+	]
+      },
+      "sub_steps": [
+        "combat"
+      ]
+    }
+  ]
+}

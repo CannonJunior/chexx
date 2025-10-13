@@ -1,0 +1,47 @@
+{
+  "id": "card_3",
+  "name": "Recon in Force",
+  "description": "Issue an order one 1 in each section.",
+  "cost": 8,
+  "type": "support",
+  "attributes": {
+    "power": 5,
+    "rarity": "common"
+  },
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "left third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "middle third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    },
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "right third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

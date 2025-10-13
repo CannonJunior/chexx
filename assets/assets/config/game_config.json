@@ -1,0 +1,77 @@
+{
+  "board": {
+    "total_hexes": 61,
+    "meta_hexes": 6,
+    "hex_size": 30.0,
+    "board_layout": "standard_61"
+  },
+  "units": {
+    "minor_units": {
+      "count_per_player": 6,
+      "health": 1,
+      "movement_range": 1,
+      "attack_range": 1,
+      "attack_damage": 1
+    },
+    "major_units": {
+      "count_per_player": 3,
+      "types": ["scout", "knight", "guardian"]
+    }
+  },
+  "gameplay": {
+    "turn_timer_seconds": 6,
+    "max_reward_points": 61,
+    "time_bonus_multiplier": 5
+  },
+  "unit_types": {
+    "scout": {
+      "health": 2,
+      "movement_range": 3,
+      "attack_range": 3,
+      "attack_damage": 1,
+      "movement_type": "straight_line"
+    },
+    "knight": {
+      "health": 3,
+      "movement_range": 2,
+      "attack_range": 2,
+      "attack_damage": 2,
+      "movement_type": "l_shaped"
+    },
+    "guardian": {
+      "health": 3,
+      "movement_range": 1,
+      "attack_range": 1,
+      "attack_damage": 1,
+      "movement_type": "adjacent",
+      "special": "can_swap_with_friendly"
+    }
+  },
+  "meta_abilities": {
+    "spawn": {
+      "description": "Create new Minor Unit on adjacent hex",
+      "range": 1,
+      "cooldown": 3
+    },
+    "heal": {
+      "description": "Heal adjacent friendly unit by 1 HP",
+      "range": 1,
+      "heal_amount": 1,
+      "cooldown": 2
+    },
+    "shield": {
+      "description": "Adjacent friendly units take -1 damage for 2 turns",
+      "range": 1,
+      "duration": 2,
+      "cooldown": 4
+    }
+  },
+  "meta_hex_positions": [
+    {"q": 0, "r": -2},
+    {"q": 2, "r": -1},
+    {"q": -2, "r": 1},
+    {"q": 0, "r": 2},
+    {"q": -1, "r": -1},
+    {"q": 1, "r": 1}
+  ]
+}
