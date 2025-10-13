@@ -249,6 +249,12 @@ class GameState extends ChangeNotifier {
     selectedUnit = unit;
     unit.state = UnitState.selected;
 
+    // In WWII mode, register that we've ordered this unit
+    if (_actionCardDeck != null) {
+      orderUnit();
+      print('DEBUG: Unit ordered - ${unitsCanOrderRemaining} orders remaining');
+    }
+
     // Initialize keyboard movement tracking
     remainingMoves = unit.effectiveMovementRange;
     originalPosition = unit.position;
@@ -257,8 +263,14 @@ class GameState extends ChangeNotifier {
     availableMoves = unit.getValidMoves(units);
     availableAttacks = unit.getValidAttacks(units);
 
+    print('DEBUG: selectUnit - availableMoves count: ${availableMoves.length}');
+    print('DEBUG: selectUnit - availableAttacks count: ${availableAttacks.length}');
+
     // Highlight valid moves
     board.highlightCoordinates(availableMoves);
+
+    // Notify listeners so UI updates
+    notifyListeners();
   }
 
   /// Deselect current unit

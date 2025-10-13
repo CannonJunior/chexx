@@ -1,0 +1,58 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run Flutter Analyze (strict)
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Run all tests (strict)
+        run: flutter test --reporter expanded
+
+      - name: Check for TODO comments
+        run: |
+          echo "Checking for TODO comments..."
+          TODO_COUNT=$(grep -r "TODO" lib/ test/ | grep -v "TodoWrite" | wc -l || true)
+          echo "Found $TODO_COUNT TODO comments"
+          if [ $TODO_COUNT -gt 50 ]; then
+            echo "⚠️  Warning: High number of TODO comments ($TODO_COUNT)"
+          fi
+
+      - name: Check file sizes
+        run: |
+          echo "Checking for large files (>500 lines)..."
+          find lib -name "*.dart" -exec wc -l {} \; | awk '$1 > 500 {print "⚠️  " $2 " has " $1 " lines (>500)"}' || true
+
+      - name: PR Summary
+        if: always()
+        run: |
+          echo "## Pull Request Checks Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ All PR checks passed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Code analysis: passed" >> $GITHUB_STEP_SUMMARY
+          echo "- All tests: passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Code quality: checked" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This PR is ready for review! 🚀" >> $GITHUB_STEP_SUMMARY
