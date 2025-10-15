@@ -158,9 +158,40 @@ This design allows easy balance updates without code changes.
 
 ### Running Tests
 
+#### Quick Tests (Fast feedback - recommended for development)
 ```bash
-flutter test
+./run_quick_tests.sh
 ```
+Runs unit tests and compilation validation (~5-10 seconds)
+
+#### Full Test Suite
+```bash
+./run_tests.sh
+```
+Runs all tests including static analysis and Web compilation (~30-90 seconds)
+
+#### Manual Test Commands
+```bash
+# Run all tests
+flutter test
+
+# Run specific test file
+flutter test test/compilation_validation_test.dart
+
+# Run with coverage
+flutter test --coverage
+
+# Skip Web build tests (faster)
+SKIP_WEB_BUILD_TEST=true flutter test
+```
+
+#### Test Categories
+- **Unit Tests**: Core game logic (hex coordinates, game board, state management)
+- **Compilation Tests**: Import validation, type accessibility
+- **Static Analysis**: Code quality and linting checks
+- **Web Compilation**: Full Web build verification
+
+See `test/README.md` for detailed testing documentation.
 
 ### Building for Production
 

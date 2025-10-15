@@ -340,24 +340,19 @@ class _CardGameScreenState extends State<CardGameScreen> {
     // Play card to f-card engine (moves to inPlay zone and sets hasPlayedCardThisTurn flag)
     cardGameState.playCard(card, destination: f_card.CardZone.inPlay);
 
-    // Clear all hex highlights when card is played
+    // DO NOT clear hex highlights here - they will be set when action is clicked
+    // Highlights are managed by _onActionTapped() and _completeAction()
     if (_chexxGameEngine != null) {
       final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
-      chexxState.moveAndFireHexes.clear();
-      chexxState.moveOnlyHexes.clear();
-      chexxState.attackRangeHexes.clear();
-      chexxState.highlightedHexes.clear();
-      chexxState.activeCardActionHexTiles = null;
-      chexxState.lastMoveWasMoveOnly = false;
-      chexxState.targetedEnemy = null;
 
-      // Deselect all units
+      // Only deselect units, but don't clear highlights
+      // This allows the action system to properly highlight hexes when actions are clicked
       for (final unit in chexxState.simpleUnits) {
         unit.isSelected = false;
       }
 
       _chexxGameEngine!.notifyListeners();
-      print('Cleared all hex highlights after playing card');
+      print('Card played - highlights will be set when action is clicked');
     }
 
     // Check if any actions on this card have valid units
@@ -837,13 +832,31 @@ class _CardGameScreenState extends State<CardGameScreen> {
       final currentPlayer = chexxState.currentPlayer;
       final playerUnitHexes = <core_hex.HexCoordinate>{};
 
+      print('DEBUG HIGHLIGHT: Current player: ${currentPlayer.name}');
+      print('DEBUG HIGHLIGHT: Total units in game: ${chexxState.simpleUnits.length}');
+      print('DEBUG HIGHLIGHT: Used unit IDs: $usedUnitIds');
+      print('DEBUG HIGHLIGHT: hex_tiles restriction: $hexTiles');
+      print('DEBUG HIGHLIGHT: Allowed hexes count: ${allowedHexes?.length ?? "null (no restriction)"}');
+
       // Get unit_restrictions from action
       final unitRestriction = action['unit_restrictions'] as String?;
+      print('DEBUG HIGHLIGHT: unit_restrictions: ${unitRestriction ?? "none"}');
+
+      int totalPlayerUnits = 0;
+      int skippedBecauseUsed = 0;
+      int skippedBecauseUnitRestriction = 0;
+      int skippedBecauseHexTiles = 0;
+      int added = 0;
 
       for (final unit in chexxState.simpleUnits) {
         if (unit.owner == currentPlayer) {
+          totalPlayerUnits++;
+          print('DEBUG HIGHLIGHT: Checking unit ${unit.id} (${unit.unitType}) at ${unit.position}, remainingMovement=${unit.remainingMovement}');
+
           // Skip units that have already been used for an action on this card
           if (usedUnitIds.contains(unit.id)) {
+            skippedBecauseUsed++;
+            print('  - SKIPPED: Already used');
             continue;
           }
 
@@ -852,7 +865,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
             final restrictionLower = unitRestriction.toLowerCase();
             final unitTypeLower = unit.unitType.toLowerCase();
             if (!unitTypeLower.contains(restrictionLower)) {
-              // Unit doesn't match restriction - skip it
+              skippedBecauseUnitRestriction++;
+              print('  - SKIPPED: Unit type "$unitTypeLower" does not match restriction "$restrictionLower"');
               continue;
             }
           }
@@ -860,9 +874,21 @@ class _CardGameScreenState extends State<CardGameScreen> {
           // If hex_tiles restriction exists, only add units in allowed hexes
           if (allowedHexes == null || allowedHexes.contains(unit.position)) {
             playerUnitHexes.add(unit.position);
+            added++;
+            print('  - ADDED to highlights');
+          } else {
+            skippedBecauseHexTiles++;
+            print('  - SKIPPED: Not in allowed hex_tiles area');
           }
         }
       }
+
+      print('DEBUG HIGHLIGHT SUMMARY:');
+      print('  - Total ${currentPlayer.name} units: $totalPlayerUnits');
+      print('  - Skipped (already used): $skippedBecauseUsed');
+      print('  - Skipped (unit restriction): $skippedBecauseUnitRestriction');
+      print('  - Skipped (hex_tiles): $skippedBecauseHexTiles');
+      print('  - Added to highlights: $added');
 
       chexxState.highlightedHexes = playerUnitHexes;
       print('HIGHLIGHT: Set ${playerUnitHexes.length} hexes to highlight');

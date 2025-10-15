@@ -203,7 +203,8 @@ void main() {
       state.selectUnitTemplate(incrementableTemplate);
       state.placeItem(testCoord);
 
-      // Select the placed unit by clicking on it
+      // Deselect template and select the placed unit
+      state.selectUnitTemplate(null);
       final placedUnit = state.getPlacedUnitAt(testCoord);
       state.selectPlacedUnit(placedUnit);
 
@@ -242,9 +243,10 @@ void main() {
         orElse: () => state.availableUnits.first,
       );
 
-      // Place and select the unit
+      // Place the unit, deselect template, and select the placed unit
       state.selectUnitTemplate(incrementableTemplate);
       state.placeItem(testCoord);
+      state.selectUnitTemplate(null);
       final placedUnit = state.getPlacedUnitAt(testCoord);
       state.selectPlacedUnit(placedUnit);
 
@@ -299,9 +301,10 @@ void main() {
         orElse: () => state.availableUnits.first,
       );
 
-      // Place and select the unit
+      // Place the unit, deselect template, and select the placed unit
       state.selectUnitTemplate(nonIncrementableTemplate);
       state.placeItem(testCoord);
+      state.selectUnitTemplate(null);
       final placedUnit = state.getPlacedUnitAt(testCoord);
       state.selectPlacedUnit(placedUnit);
 

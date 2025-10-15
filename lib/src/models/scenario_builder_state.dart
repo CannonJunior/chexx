@@ -294,7 +294,10 @@ class ScenarioBuilderState extends ChangeNotifier {
     selectedUnitTemplate = template;
     selectedStructureTemplate = null; // Deselect structure when selecting unit
     selectedTileType = null; // Deselect tile type when selecting unit
-    selectedPlacedUnit = null; // Deselect placed unit when selecting template
+    // Only clear selectedPlacedUnit when actually selecting a NEW template (not null)
+    if (template != null) {
+      selectedPlacedUnit = null; // Deselect placed unit when selecting a new template
+    }
     notifyListeners();
   }
 
@@ -303,7 +306,10 @@ class ScenarioBuilderState extends ChangeNotifier {
     selectedStructureTemplate = template;
     selectedUnitTemplate = null; // Deselect unit when selecting structure
     selectedTileType = null; // Deselect tile type when selecting structure
-    selectedPlacedUnit = null; // Deselect placed unit when selecting template
+    // Only clear selectedPlacedUnit when actually selecting a NEW template (not null)
+    if (template != null) {
+      selectedPlacedUnit = null; // Deselect placed unit when selecting a new template
+    }
     notifyListeners();
   }
 
@@ -436,6 +442,12 @@ class ScenarioBuilderState extends ChangeNotifier {
     print('DEBUG STATE: ========== INCREMENT HEALTH CALLED ==========');
     print('DEBUG STATE: selectedPlacedUnit: ${selectedPlacedUnit != null ? "NOT NULL" : "NULL"}');
 
+    // Don't allow health modification while a template is selected (placement mode)
+    if (selectedUnitTemplate != null || selectedStructureTemplate != null) {
+      print('DEBUG STATE: FAILED - Template is selected (in placement mode)');
+      return false;
+    }
+
     if (selectedPlacedUnit == null) {
       print('DEBUG STATE: FAILED - No unit selected');
       return false;
@@ -488,6 +500,12 @@ class ScenarioBuilderState extends ChangeNotifier {
   bool decrementSelectedUnitHealth() {
     print('DEBUG STATE: ========== DECREMENT HEALTH CALLED ==========');
     print('DEBUG STATE: selectedPlacedUnit: ${selectedPlacedUnit != null ? "NOT NULL" : "NULL"}');
+
+    // Don't allow health modification while a template is selected (placement mode)
+    if (selectedUnitTemplate != null || selectedStructureTemplate != null) {
+      print('DEBUG STATE: FAILED - Template is selected (in placement mode)');
+      return false;
+    }
 
     if (selectedPlacedUnit == null) {
       print('DEBUG STATE: FAILED - No unit selected');
@@ -568,7 +586,7 @@ class ScenarioBuilderState extends ChangeNotifier {
     }
   }
 
-  /// Place a unit at the specified position (with health incrementation for incrementable units)
+  /// Place a unit at the specified position (with click cycle: place → select → remove)
   bool _placeUnit(HexCoordinate position) {
     if (selectedUnitTemplate == null) return false;
 
@@ -576,15 +594,27 @@ class ScenarioBuilderState extends ChangeNotifier {
     final existingUnits = placedUnits.where((unit) => unit.position == position).toList();
     final existingUnit = existingUnits.isNotEmpty ? existingUnits.first : null;
 
-    // Check if this unit type is incrementable
-    final isIncrementable = _isIncrementableTemplate(selectedUnitTemplate!);
-
     if (existingUnit != null) {
-      // Remove existing unit (click to replace behavior)
-      placedUnits.remove(existingUnit);
+      // Click cycle behavior:
+      // If unit is already selected, remove it (Click 3)
+      if (selectedPlacedUnit == existingUnit) {
+        placedUnits.remove(existingUnit);
+        selectedPlacedUnit = null;
+        notifyListeners();
+        return true;
+      }
+
+      // If unit exists but not selected, select it (Click 2)
+      selectedPlacedUnit = existingUnit;
+      print('DEBUG: Placed unit SELECTED at (${existingUnit.position.q}, ${existingUnit.position.r}) - ID: ${existingUnit.template.id}');
+      print('  Ready for health modification with arrow keys!');
+      notifyListeners();
+      return true;
     }
 
-    // Place new unit with starting health from configuration for incrementable units
+    // No unit at position, place new unit (Click 1)
+    // Check if this unit type is incrementable
+    final isIncrementable = _isIncrementableTemplate(selectedUnitTemplate!);
     final customHealth = isIncrementable ? _getStartingHealthForTemplate(selectedUnitTemplate!) : null;
 
     placedUnits.add(PlacedUnit(
@@ -597,18 +627,22 @@ class ScenarioBuilderState extends ChangeNotifier {
     return true;
   }
 
-  /// Place a structure at the specified position
+  /// Place a structure at the specified position (with click cycle: place → remove)
   bool _placeStructure(HexCoordinate position) {
     if (selectedStructureTemplate == null) return false;
 
     // Check if position is already occupied by a structure
     final existingStructures = placedStructures.where((structure) => structure.position == position).toList();
     final existingStructure = existingStructures.isNotEmpty ? existingStructures.first : null;
+
     if (existingStructure != null) {
-      // Replace existing structure
+      // Click cycle behavior: If structure exists, remove it (Click 2)
       placedStructures.remove(existingStructure);
+      notifyListeners();
+      return true;
     }
 
+    // No structure at position, place new structure (Click 1)
     placedStructures.add(PlacedStructure(
       template: selectedStructureTemplate!,
       position: position,

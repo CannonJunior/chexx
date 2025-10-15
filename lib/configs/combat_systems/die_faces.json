@@ -40,7 +40,7 @@
   },
   "combat_modifiers": {
     "description": "Effectiveness matrix for die face vs tile type combat",
-    "tile_type": {
+    "effectiveness": {
       "infantry": {
         "normal": 0,
         "meta": 0,
@@ -50,7 +50,8 @@
         "hill": -1,
         "town": -1,
         "forest": -1,
-        "hedgerow": -1
+        "hedgerow": -1,
+        "bunker": -1
       },
       "armor": {
         "normal": 0,
@@ -61,7 +62,8 @@
         "hill": -1,
         "town": -2,
         "forest": -1,
-        "hedgerow": -1
+        "hedgerow": -1,
+        "bunker": -1
       },
       "artillery": {
         "normal": 0,
@@ -72,18 +74,21 @@
         "hill": 0,
         "town": -1,
         "forest": -1,
-        "hedgerow": -1
-      }
-    },
-    "structure_type": {
-      "infantry": {
+        "hedgerow": -1,
         "bunker": -1
       },
-      "armor": {
-        "bunker": -1
-      },
-      "artillery": {
-        "bunker": -1
+      "grenade": {
+        "normal": 0,
+        "meta": 0,
+        "blocked": 0,
+        "ocean": 0,
+        "beach": 0,
+        "hill": 0,
+        "town": 0,
+        "forest": 0,
+        "hedgerow": 0,
+        "bunker": 0
       }
+    }
   }
 }

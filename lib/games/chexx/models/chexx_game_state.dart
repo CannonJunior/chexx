@@ -233,19 +233,19 @@ class ChexxGameState extends GameStateBase {
       unitOverrides.clear();
     }
 
-    // Reset movement for all units of the next player
-    _resetPlayerMovement();
-
     // Clear special attack tracking for new turn
     unitUsedSpecialAttack.clear();
     unitCanSpecialAttack.clear();
 
-    // Switch players
+    // Switch players FIRST
     currentPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
 
     if (currentPlayer == Player.player1) {
       turnNumber++;
     }
+
+    // THEN reset movement for the NEW current player (whose turn is starting)
+    _resetPlayerMovement();
 
     turnPhase = TurnPhase.moving;
     turnTimeRemaining = 6.0;
@@ -476,9 +476,9 @@ class ChexxGameState extends GameStateBase {
 
         print('Loading unit: $unitType, savedHealth: $savedHealth, actualHealth: $actualHealth, maxHealth: $maxHealth');
 
-        // Create simple unit
+        // Create simple unit with unique ID based on position
         final unit = SimpleGameUnit(
-          id: unitId,
+          id: '${unitType}_${owner.name}_${position.q}_${position.r}_${position.s}',
           unitType: unitType,
           owner: owner,
           position: position,
@@ -1376,17 +1376,17 @@ class ChexxGameState extends GameStateBase {
 
     // Get overrides from card action
     final overrides = cardAction['overrides'] as Map<String, dynamic>?;
-    if (overrides == null || overrides.isEmpty) {
-      print('DEBUG APPLY: No overrides found in card action');
-      return false;
+    if (overrides != null && overrides.isNotEmpty) {
+      // Store overrides for this unit
+      unitOverrides[unitId] = Map<String, dynamic>.from(overrides);
+      print('DEBUG APPLY: Applied card overrides to unit $unitId: $overrides');
+    } else {
+      print('DEBUG APPLY: No overrides found in card action - will use base unit stats');
     }
 
-    // Store overrides for this unit
-    unitOverrides[unitId] = Map<String, dynamic>.from(overrides);
-    print('DEBUG APPLY: Applied card overrides to unit $unitId: $overrides');
     print('DEBUG APPLY: About to call calculateWayfinding for unit ${unit.id} at ${unit.position}');
 
-    // Recalculate movement for this unit
+    // Recalculate movement for this unit (ALWAYS do this, even without overrides)
     calculateWayfinding(unit);
     calculateAttackRange(unit);
 
