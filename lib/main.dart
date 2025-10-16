@@ -53,7 +53,7 @@ class MainMenuScreen extends StatefulWidget {
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
-  String selectedGameMode = 'chexx'; // Default game mode
+  String selectedGameMode = 'card'; // Default game mode - Card Game
   Map<String, dynamic>? loadedScenario;
   String? scenarioName;
   String? errorMessage;
@@ -132,12 +132,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Chexx mode
+                    // Card mode (now first)
                     _buildGameModeOption(
-                      'chexx',
-                      'CHEXX',
-                      'Classic hexagonal strategy game',
-                      Colors.blue,
+                      'card',
+                      'Card Game',
+                      'F-Card engine powered card gameplay',
+                      Colors.purple,
                     ),
                     const SizedBox(height: 12),
 
@@ -150,12 +150,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Card mode
+                    // Chexx mode
                     _buildGameModeOption(
-                      'card',
-                      'Card Game',
-                      'F-Card engine powered card gameplay',
-                      Colors.purple,
+                      'chexx',
+                      'CHEXX',
+                      'Classic hexagonal strategy game',
+                      Colors.blue,
                     ),
                   ],
                 ),

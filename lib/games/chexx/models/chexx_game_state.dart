@@ -899,11 +899,11 @@ class ChexxGameState extends GameStateBase {
     final attackRange = _getUnitAttackRange(unit.unitType, unitId: unit.id);
     final baseDamage = _getUnitBaseDamage(unit.unitType, unitId: unit.id);
 
-    // Find all enemy units within attack range
+    // Find all enemy units within attack range AND with clear line of sight
     for (final targetUnit in simpleUnits) {
       if (targetUnit.owner != unit.owner) {
         final distance = unit.position.distanceTo(targetUnit.position);
-        if (distance <= attackRange) {
+        if (distance <= attackRange && hasLineOfSight(unit.position, targetUnit.position)) {
           // Calculate expected damage at this distance
           final damage = _calculateExpectedDamage(unit, targetUnit, distance);
           attackRangeHexes[targetUnit.position] = damage;
@@ -1366,10 +1366,11 @@ class ChexxGameState extends GameStateBase {
     print('DEBUG APPLY: applyCardEffectsToUnit called for unitId=$unitId');
 
     // Find the unit
-    final unit = simpleUnits.firstWhere(
-      (u) => u.id == unitId,
-      orElse: () => throw Exception('Unit not found: $unitId'),
-    );
+    final unitIndex = simpleUnits.indexWhere((u) => u.id == unitId);
+    if (unitIndex == -1) {
+      throw Exception('Unit not found: $unitId');
+    }
+    final unit = simpleUnits[unitIndex];
     print('DEBUG APPLY: Found unit: ${unit.id} (${unit.unitType}) at position ${unit.position}');
 
     // Check unit restrictions
@@ -1404,15 +1405,36 @@ class ChexxGameState extends GameStateBase {
     if (effectiveOverrides.isNotEmpty) {
       unitOverrides[unitId] = effectiveOverrides;
       print('DEBUG APPLY: Applied card overrides to unit $unitId: $effectiveOverrides');
+
+      // Update unit's remainingMovement if movement_range override exists
+      if (effectiveOverrides.containsKey('movement_range')) {
+        final newMovement = effectiveOverrides['movement_range'] as int;
+        final updatedUnit = SimpleGameUnit(
+          id: unit.id,
+          unitType: unit.unitType,
+          owner: unit.owner,
+          position: unit.position,
+          health: unit.health,
+          maxHealth: unit.maxHealth,
+          remainingMovement: newMovement,
+          moveAfterCombat: effectiveOverrides['move_after_combat'] as int? ?? unit.moveAfterCombat,
+          isSelected: unit.isSelected,
+        );
+        simpleUnits[unitIndex] = updatedUnit;
+        print('DEBUG APPLY: Updated unit remainingMovement to $newMovement and moveAfterCombat to ${updatedUnit.moveAfterCombat}');
+      }
     } else {
       print('DEBUG APPLY: No overrides found in card action - will use base unit stats');
     }
 
     print('DEBUG APPLY: About to call calculateWayfinding for unit ${unit.id} at ${unit.position}');
 
+    // Get the updated unit reference
+    final updatedUnit = simpleUnits[unitIndex];
+
     // Recalculate movement for this unit (ALWAYS do this, even without overrides)
-    calculateWayfinding(unit);
-    calculateAttackRange(unit);
+    calculateWayfinding(updatedUnit);
+    calculateAttackRange(updatedUnit);
 
     notifyListeners();
     return true;
@@ -1530,5 +1552,86 @@ class ChexxGameState extends GameStateBase {
 
     print('DEBUG NOT ADJACENT: Result: ${notAdjacentHexes.length} hexes not adjacent to enemies');
     return notAdjacentHexes;
+  }
+
+  /// Roll a battle die and return the face result
+  /// Returns one of: 'infantry', 'armor', 'artillery', 'grenade', 'flag', 'star'
+  String rollBattleDie() {
+    final random = Random();
+    final roll = random.nextInt(6);
+
+    // Standard battle die faces
+    switch (roll) {
+      case 0: return 'infantry';
+      case 1: return 'armor';
+      case 2: return 'artillery';
+      case 3: return 'grenade';
+      case 4: return 'flag';
+      case 5: return 'star';
+      default: return 'infantry';
+    }
+  }
+
+  /// Get neighboring hexes for a given coordinate
+  List<core_hex.HexCoordinate> getNeighbors(core_hex.HexCoordinate hex) {
+    return _getAdjacentHexes(hex);
+  }
+
+  /// Update a unit's health
+  /// Returns true if successful, false if unit not found
+  bool updateUnitHealth(String unitId, int newHealth) {
+    final unitIndex = simpleUnits.indexWhere((u) => u.id == unitId);
+    if (unitIndex == -1) {
+      print('ERROR: Cannot update health - unit not found: $unitId');
+      return false;
+    }
+
+    final unit = simpleUnits[unitIndex];
+    final clampedHealth = newHealth.clamp(0, unit.maxHealth);
+
+    final updatedUnit = SimpleGameUnit(
+      id: unit.id,
+      unitType: unit.unitType,
+      owner: unit.owner,
+      position: unit.position,
+      health: clampedHealth,
+      maxHealth: unit.maxHealth,
+      remainingMovement: unit.remainingMovement,
+      moveAfterCombat: unit.moveAfterCombat,
+      isSelected: unit.isSelected,
+    );
+
+    simpleUnits[unitIndex] = updatedUnit;
+    print('Updated unit $unitId health: ${unit.health} -> $clampedHealth');
+    notifyListeners();
+    return true;
+  }
+
+  /// Track the last combat target position for card actions
+  core_hex.HexCoordinate? lastCombatTargetPosition;
+
+  /// Set the last combat target position (called by combat system)
+  void setLastCombatTarget(core_hex.HexCoordinate position) {
+    lastCombatTargetPosition = position;
+    print('Last combat target position set to: $position');
+  }
+
+  /// Check if there is a clear line of sight between two hexes for combat
+  /// Returns true if the attacker can see the defender
+  ///
+  /// Line of sight rules (to be implemented):
+  /// - Basic implementation: always returns true (no LOS blocking yet)
+  /// - Future: Check for blocking terrain, structures, or units between positions
+  bool hasLineOfSight(core_hex.HexCoordinate from, core_hex.HexCoordinate to) {
+    // TODO: Implement line of sight blocking rules
+    // For now, always return true (no LOS blocking)
+    //
+    // Future rules to implement:
+    // 1. Check if any blocking structures are in the path (e.g., bunkers, hills)
+    // 2. Check if any blocking terrain is in the path (e.g., forests, buildings)
+    // 3. Adjacent hexes always have LOS (distance 1)
+    // 4. Use Bresenham's line algorithm to check all hexes in the path
+
+    return true;
   }
 }

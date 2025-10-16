@@ -6,6 +6,7 @@ import '../chexx/models/chexx_game_state.dart';
 import '../chexx/chexx_plugin.dart';
 import '../../core/models/hex_coordinate.dart' as core_hex;
 import '../../core/interfaces/unit_factory.dart';
+import '../../src/models/scenario_builder_state.dart';
 import 'card_plugin.dart';
 import 'card_game_state_adapter.dart';
 
@@ -31,6 +32,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
   // Card action state
   dynamic playedCard; // Card currently being played (showing actions)
+  List<Map<String, dynamic>>? generatedActions; // Store dynamically generated actions separate from the card
   Set<int> completedActions = {}; // Track which actions are completed
   int? activeActionIndex; // Which action is currently being used
   Map<String, Map<String, dynamic>> unitOriginalValues = {}; // Store original unit values before applying special attributes
@@ -43,6 +45,17 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
   // Unit usage tracking per card
   Set<String> usedUnitIds = {}; // Track units that have been used for actions on the current card
+
+  // Air strike cluster tracking (for Air Power card)
+  Set<core_hex.HexCoordinate> airStrikeCluster = {}; // Track targeted enemy unit positions
+
+  // Section selection for cards like Infantry Assault
+  bool isWaitingForSectionSelection = false;
+  String? selectedSection; // 'left third', 'middle third', or 'right third'
+
+  // Card choice for Recon card (card_23)
+  bool isWaitingForCardChoice = false; // True when showing two cards to choose from
+  List<dynamic> cardChoices = []; // The two cards to choose from
 
   @override
   void initState() {
@@ -67,6 +80,18 @@ class _CardGameScreenState extends State<CardGameScreen> {
     if (cardGameState.cardCurrentPlayer != null) {
       print('Current player hand: ${cardGameState.cardCurrentPlayer!.hand.length}');
     }
+  }
+
+  /// Helper method to get the current actions for the played card
+  /// Returns either the generated actions or the card's default actions
+  List<Map<String, dynamic>>? _getCurrentActions() {
+    if (generatedActions != null) {
+      return generatedActions;
+    }
+    if (playedCard != null && playedCard.card.actions != null) {
+      return List<Map<String, dynamic>>.from(playedCard.card.actions!);
+    }
+    return null;
   }
 
   @override
@@ -118,6 +143,12 @@ class _CardGameScreenState extends State<CardGameScreen> {
             child: _buildCardHandBar(),
           ),
         ),
+
+        // Card choice dialog (for Recon card effect)
+        if (isWaitingForCardChoice)
+          Positioned.fill(
+            child: _buildCardChoiceDialog(),
+          ),
       ],
     );
   }
@@ -211,7 +242,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: selectedCard != null ? () => _playCard(selectedCard) : null,
+                    onPressed: _canPlaySelectedCard() ? () => _playCard(selectedCard) : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
                       foregroundColor: Colors.white,
@@ -336,6 +367,80 @@ class _CardGameScreenState extends State<CardGameScreen> {
     });
   }
 
+  bool _canPlaySelectedCard() {
+    if (selectedCard == null) return false;
+
+    // Check if the card is reactive (can only be played as a reaction)
+    final isReactive = selectedCard.card.reactive as bool? ?? false;
+
+    if (isReactive) {
+      // Reactive cards cannot be played during the player's own turn
+      // They can only be played as reactions during opponent's turn
+      print('Card ${selectedCard.card.name} is reactive - cannot be played on player\'s own turn');
+      return false;
+    }
+
+    return true;
+  }
+
+  void _selectSection(String section) {
+    if (_chexxGameEngine == null || playedCard == null) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+    final currentPlayer = chexxState.currentPlayer;
+    final templateAction = _getCurrentActions()![0];
+
+    print('Section selected: $section');
+
+    // Update the template action's hex_tiles to the selected section
+    templateAction['hex_tiles'] = section;
+
+    // Get matching units for this section
+    final unitRestriction = templateAction['unit_restrictions'];
+    List<SimpleGameUnit> matchingUnits = chexxState.getUnitsMatchingRestriction(unitRestriction, currentPlayer);
+    print('Found ${matchingUnits.length} units matching restriction: $unitRestriction');
+
+    // Filter by selected section
+    final allowedHexes = chexxState.getHexesForThird(section);
+    matchingUnits = matchingUnits.where((unit) => allowedHexes.contains(unit.position)).toList();
+    print('Filtered to ${matchingUnits.length} units in $section');
+
+    if (matchingUnits.isNotEmpty) {
+      // Generate one action per matching unit
+      final actions = matchingUnits.map((unit) {
+        final actionCopy = Map<String, dynamic>.from(templateAction);
+        actionCopy['generated_for_unit_id'] = unit.id;
+        actionCopy['unit_restrictions'] = unit.unitType;
+        print('Generated action for unit ${unit.id} (${unit.unitType})');
+        return actionCopy;
+      }).toList();
+
+      generatedActions = actions;
+      print('Generated ${actions.length} actions from section $section');
+    } else {
+      // No matching units in this section - use fallback action
+      print('No matching units in $section - using fallback');
+      final hasAnyUnits = chexxState.simpleUnits.any((unit) => unit.owner == currentPlayer);
+      if (hasAnyUnits) {
+        generatedActions = [
+          {
+            'action_type': 'order',
+            'name': 'Select Unit',
+            'unit_restrictions': 'none',
+            'hex_tiles': 'all',
+            'sub_steps': ['unit_selection', 'before_combat_movement', 'combat'],
+          }
+        ];
+        print('Created fallback action for section with no matching units');
+      }
+    }
+
+    setState(() {
+      isWaitingForSectionSelection = false;
+      selectedSection = section;
+    });
+  }
+
   void _playCard(dynamic card) {
     // Play card to f-card engine (moves to inPlay zone and sets hasPlayedCardThisTurn flag)
     cardGameState.playCard(card, destination: f_card.CardZone.inPlay);
@@ -354,90 +459,125 @@ class _CardGameScreenState extends State<CardGameScreen> {
       _chexxGameEngine!.notifyListeners();
       print('Card played - highlights will be set when action is clicked');
 
-      // Check if card has "type": "all" - if so, generate one action per matching unit
-      if (card.card.type == 'all' && card.card.actions != null && card.card.actions!.isNotEmpty) {
-        print('Card has type "all" - generating actions for each matching unit');
+      // First, check if the card's actions have any valid units
+      // This applies to ALL cards, not just "type": "all"
+      bool anyActionHasUnits = false;
+      if (card.card.actions != null && card.card.actions!.isNotEmpty) {
+        for (int i = 0; i < card.card.actions!.length; i++) {
+          if (_actionHasValidUnitsForNewCard(card.card.actions![i])) {
+            anyActionHasUnits = true;
+            break;
+          }
+        }
+      }
+
+      // If no actions have valid units, replace with a fallback action
+      if (!anyActionHasUnits) {
+        print('No valid units for card actions - checking if player has any units');
         final currentPlayer = chexxState.currentPlayer;
-        final templateAction = card.card.actions![0]; // Use first action as template
-        final unitRestriction = templateAction['unit_restrictions']; // Can be String or List
-        final hexTiles = templateAction['hex_tiles'] as String?;
+        final hasAnyUnits = chexxState.simpleUnits.any((unit) => unit.owner == currentPlayer);
 
-        // Get all matching units for this player
-        List<SimpleGameUnit> matchingUnits = chexxState.getUnitsMatchingRestriction(unitRestriction, currentPlayer);
-        print('Found ${matchingUnits.length} units matching restriction: $unitRestriction');
+        if (hasAnyUnits) {
+          // Replace card actions with a single fallback action that works with any unit
+          generatedActions = [
+            {
+              'action_type': 'order',
+              'name': 'Select Unit',
+              'unit_restrictions': 'none',
+              'hex_tiles': 'all',
+              'sub_steps': ['unit_selection', 'before_combat_movement', 'combat'],
+            }
+          ];
+          print('Replaced card actions with fallback action (player has ${chexxState.simpleUnits.where((u) => u.owner == currentPlayer).length} units)');
+          anyActionHasUnits = true; // Mark as having valid actions now
+        }
+      } else {
+        // Check if this is Infantry Assault card (needs section selection)
+        if (card.card.name == 'Infantry Assault') {
+          print('Infantry Assault card detected - enabling section selection');
+          setState(() {
+            playedCard = card;
+            isWaitingForSectionSelection = true;
+            completedActions.clear();
+            actionCurrentSubStep.clear();
+            actionCompletedSubSteps.clear();
+            actionCancelledSubSteps.clear();
+            usedUnitIds.clear();
+            activeActionIndex = null;
+            selectedCard = null;
+            allActionsComplete = false;
+          });
+          return; // Don't process actions yet - wait for section selection
+        }
 
-        // If hex_tiles has a location restriction, filter the matching units
-        if (hexTiles != null) {
-          if (hexTiles.toLowerCase() == 'adjacent to enemy units') {
-            final adjacentHexes = chexxState.getHexesAdjacentToEnemyUnits();
-            matchingUnits = matchingUnits.where((unit) => adjacentHexes.contains(unit.position)).toList();
-            print('Filtered to ${matchingUnits.length} units adjacent to enemy units');
-          } else if (hexTiles.toLowerCase() == 'not adjacent') {
-            final notAdjacentHexes = chexxState.getHexesNotAdjacentToEnemyUnits();
-            matchingUnits = matchingUnits.where((unit) => notAdjacentHexes.contains(unit.position)).toList();
-            print('Filtered to ${matchingUnits.length} units not adjacent to enemy units');
+        // Card has valid units - check if it's a "type": "all" card that needs per-unit action generation
+        if (card.card.type == 'all' && card.card.actions != null && card.card.actions!.isNotEmpty) {
+          print('Card has type "all" - generating actions for each matching unit');
+          final currentPlayer = chexxState.currentPlayer;
+          final templateAction = card.card.actions![0]; // Use first action as template
+          final unitRestriction = templateAction['unit_restrictions']; // Can be String or List
+          final hexTiles = templateAction['hex_tiles'] as String?;
+
+          // Get all matching units for this player
+          List<SimpleGameUnit> matchingUnits = chexxState.getUnitsMatchingRestriction(unitRestriction, currentPlayer);
+          print('Found ${matchingUnits.length} units matching restriction: $unitRestriction');
+
+          // If hex_tiles has a location restriction, filter the matching units
+          if (hexTiles != null) {
+            if (hexTiles.toLowerCase() == 'adjacent to enemy units') {
+              final adjacentHexes = chexxState.getHexesAdjacentToEnemyUnits();
+              matchingUnits = matchingUnits.where((unit) => adjacentHexes.contains(unit.position)).toList();
+              print('Filtered to ${matchingUnits.length} units adjacent to enemy units');
+            } else if (hexTiles.toLowerCase() == 'not adjacent') {
+              final notAdjacentHexes = chexxState.getHexesNotAdjacentToEnemyUnits();
+              matchingUnits = matchingUnits.where((unit) => notAdjacentHexes.contains(unit.position)).toList();
+              print('Filtered to ${matchingUnits.length} units not adjacent to enemy units');
+            }
+          }
+
+          if (matchingUnits.isNotEmpty) {
+            // Generate one action per matching unit
+            final actions = matchingUnits.map((unit) {
+              // Clone the template action and set unit-specific restrictions
+              final actionCopy = Map<String, dynamic>.from(templateAction);
+              actionCopy['generated_for_unit_id'] = unit.id; // Track which unit this action is for
+              actionCopy['unit_restrictions'] = unit.unitType; // Lock to this specific unit type
+              print('Generated action for unit ${unit.id} (${unit.unitType})');
+              return actionCopy;
+            }).toList();
+
+            generatedActions = actions;
+            print('Generated ${actions.length} actions from "all" type card');
+          } else {
+            // No matching units after filtering - use fallback action
+            print('No matching units after filtering for "all" type card - using fallback');
+            final hasAnyUnits = chexxState.simpleUnits.any((unit) => unit.owner == currentPlayer);
+            if (hasAnyUnits) {
+              generatedActions = [
+                {
+                  'action_type': 'order',
+                  'name': 'Select Unit',
+                  'unit_restrictions': 'none',
+                  'hex_tiles': 'all',
+                  'sub_steps': ['unit_selection', 'before_combat_movement', 'combat'],
+                }
+              ];
+              print('Created fallback action for "all" type card with no matching units');
+            }
           }
         }
-
-        if (matchingUnits.isNotEmpty) {
-          // Generate one action per matching unit
-          final generatedActions = matchingUnits.map((unit) {
-            // Clone the template action and set unit-specific restrictions
-            final actionCopy = Map<String, dynamic>.from(templateAction);
-            actionCopy['generated_for_unit_id'] = unit.id; // Track which unit this action is for
-            actionCopy['unit_restrictions'] = unit.unitType; // Lock to this specific unit type
-            print('Generated action for unit ${unit.id} (${unit.unitType})');
-            return actionCopy;
-          }).toList();
-
-          card.card.actions = generatedActions;
-          print('Generated ${generatedActions.length} actions from "all" type card');
-        } else {
-          print('No matching units found for "all" type card - will use fallback');
-        }
-      }
-    }
-
-    // Check if any actions on this card have valid units
-    bool anyActionHasUnits = false;
-    if (card.card.actions != null && card.card.actions!.isNotEmpty) {
-      for (int i = 0; i < card.card.actions!.length; i++) {
-        if (_actionHasValidUnitsForNewCard(card.card.actions![i])) {
-          anyActionHasUnits = true;
-          break;
-        }
-      }
-    }
-
-    // If no actions have valid units, replace with a fallback action
-    if (!anyActionHasUnits && _chexxGameEngine != null) {
-      print('No valid units for any action on this card - using fallback action');
-      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
-      final currentPlayer = chexxState.currentPlayer;
-
-      // Check if player has any units at all
-      final hasAnyUnits = chexxState.simpleUnits.any((unit) => unit.owner == currentPlayer);
-
-      if (hasAnyUnits) {
-        // Replace card actions with a single fallback action
-        card.card.actions = [
-          {
-            'name': 'Select Unit',
-            'hex_tiles': 'all',
-            'sub_steps': ['unit_selection'],
-          }
-        ];
-        print('Replaced card actions with fallback action');
       }
     }
 
     setState(() {
       playedCard = card;
+      generatedActions = null; // Clear generated actions for new card
       completedActions.clear();
       actionCurrentSubStep.clear();
       actionCompletedSubSteps.clear();
       actionCancelledSubSteps.clear();
       usedUnitIds.clear(); // Clear unit usage tracking for new card
+      airStrikeCluster.clear(); // Clear air strike cluster for new card
       activeActionIndex = null;
       selectedCard = null; // Clear selection
       allActionsComplete = false; // Reset for new card
@@ -494,8 +634,61 @@ class _CardGameScreenState extends State<CardGameScreen> {
           ),
           const SizedBox(height: 8),
 
+          // Section selection (for cards like Infantry Assault)
+          if (isWaitingForSectionSelection) ...[
+            const Text(
+              'SELECT SECTION:',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _selectSection('left third'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                    child: const Text('LEFT', style: TextStyle(fontSize: 9)),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _selectSection('middle third'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                    child: const Text('MIDDLE', style: TextStyle(fontSize: 9)),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _selectSection('right third'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                    child: const Text('RIGHT', style: TextStyle(fontSize: 9)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+
           // Actions (clickable)
-          if (playedCard.card.actions != null && playedCard.card.actions!.isNotEmpty) ...[
+          if (_getCurrentActions() != null && _getCurrentActions()!.isNotEmpty && !isWaitingForSectionSelection) ...[
             const Text(
               'ACTIONS - Click to activate, click again to complete:',
               style: TextStyle(
@@ -505,7 +698,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            ...(playedCard.card.actions!.asMap().entries.map((entry) {
+            ...(_getCurrentActions()!.asMap().entries.map((entry) {
               final index = entry.key;
               final action = entry.value;
               final isCompleted = completedActions.contains(index);
@@ -553,7 +746,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  '${action['action_type']}: ${action['hex_restrictions']} (${action['hex_tiles']})',
+                                  '${action['name'] ?? action['action_type']}: ${action['unit_restrictions'] ?? 'all'} (${action['hex_tiles'] ?? 'all'})',
                                   style: TextStyle(
                                     color: isCompleted ? Colors.grey : Colors.white70,
                                     fontSize: 9,
@@ -716,6 +909,24 @@ class _CardGameScreenState extends State<CardGameScreen> {
       return;
     }
 
+    // Check if this is a "heal" action (healing damaged units)
+    if (actionType == 'heal') {
+      _handleHealAction(actionIndex, action);
+      return;
+    }
+
+    // Check if this is a "their_finest_hour" action (roll dice to generate unit orders)
+    if (actionType == 'their_finest_hour') {
+      _handleTheirFinestHourAction(actionIndex, action);
+      return;
+    }
+
+    // Check if this is an "air_strike" action (target adjacent cluster of enemy units)
+    if (actionType == 'air_strike') {
+      _handleAirStrikeAction(actionIndex, action);
+      return;
+    }
+
     // Enable card action mode and highlight player's unit hexes
     if (_chexxGameEngine != null) {
       final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
@@ -729,13 +940,16 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       // Set up sub-step tracking callbacks
       chexxState.onUnitSelected = () {
+        // Get the action first
+        final currentAction = _getCurrentActions()![actionIndex];
+
         // Track that this unit has been used for an action on this card
         if (chexxState.activeCardActionUnitId != null) {
           usedUnitIds.add(chexxState.activeCardActionUnitId!);
           print('Unit ${chexxState.activeCardActionUnitId} added to used units: $usedUnitIds');
 
           // Apply card overrides to the selected unit
-          final success = chexxState.applyCardEffectsToUnit(chexxState.activeCardActionUnitId!, action);
+          final success = chexxState.applyCardEffectsToUnit(chexxState.activeCardActionUnitId!, currentAction);
           if (success) {
             print('Successfully applied card overrides to unit ${chexxState.activeCardActionUnitId}');
           } else {
@@ -743,11 +957,23 @@ class _CardGameScreenState extends State<CardGameScreen> {
           }
         }
         _advanceSubStep(actionIndex, 'unit_selection');
+
+        // Check if this is a Dig-In action (has place_sandbag but no movement)
+        final subSteps = currentAction['sub_steps'] as List?;
+        if (subSteps != null) {
+          final hasPlaceSandbag = subSteps.contains('place_sandbag');
+          final hasMovement = subSteps.contains('before_combat_movement');
+
+          if (hasPlaceSandbag && !hasMovement) {
+            // This is Dig-In - unit doesn't move, just waits for combat or auto-places sandbag
+            print('Dig-In action detected - unit selected, waiting for combat or will auto-place sandbag');
+          }
+        }
       };
 
       chexxState.onUnitMoved = () {
         // Check if movement was already completed
-        final action = playedCard.card.actions![actionIndex];
+        final action = _getCurrentActions()![actionIndex];
         final subSteps = action['sub_steps'] as List?;
         if (subSteps != null) {
           final movementStepIndex = subSteps.indexWhere((step) => step == 'before_combat_movement');
@@ -835,7 +1061,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       chexxState.onCombatOccurred = () {
         // If unit didn't move before combat, auto-complete movement sub-step
-        final action = playedCard.card.actions![actionIndex];
+        final action = _getCurrentActions()![actionIndex];
         final subSteps = action['sub_steps'] as List?;
         if (subSteps != null) {
           final movementStepIndex = subSteps.indexWhere((step) => step == 'before_combat_movement');
@@ -848,6 +1074,21 @@ class _CardGameScreenState extends State<CardGameScreen> {
           }
         }
         _advanceSubStep(actionIndex, 'combat');
+
+        // Check if there's a place_sandbag sub-step
+        if (subSteps != null) {
+          final sandbagStepIndex = subSteps.indexWhere((step) => step == 'place_sandbag');
+          if (sandbagStepIndex != -1) {
+            // Auto-place sandbag on the selected unit's hex
+            final selectedUnit = chexxState.simpleUnits.firstWhere(
+              (u) => u.isSelected,
+              orElse: () => throw Exception('No selected unit'),
+            );
+            _placeSandbagOnUnit(selectedUnit);
+            _advanceSubStep(actionIndex, 'place_sandbag');
+            return; // Don't check for after-combat movement
+          }
+        }
 
         // Check if we should auto-complete after-combat movement
         final selectedUnit = chexxState.simpleUnits.firstWhere(
@@ -874,9 +1115,21 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       // Get allowed hexes based on hex_tiles restriction
       // If hex_tiles is "all", "none", or null, no filtering is applied
-      final allowedHexes = (hexTiles != null && hexTiles != 'none' && hexTiles != 'all')
-          ? chexxState.getHexesForThird(hexTiles)
-          : null;
+      Set<core_hex.HexCoordinate>? allowedHexes;
+      if (hexTiles != null && hexTiles != 'none' && hexTiles != 'all') {
+        // Handle special location restrictions
+        if (hexTiles.toLowerCase() == 'not adjacent') {
+          allowedHexes = chexxState.getHexesNotAdjacentToEnemyUnits();
+          print('DEBUG HIGHLIGHT: Using not adjacent hexes: ${allowedHexes.length} hexes');
+        } else if (hexTiles.toLowerCase() == 'adjacent to enemy units') {
+          allowedHexes = chexxState.getHexesAdjacentToEnemyUnits();
+          print('DEBUG HIGHLIGHT: Using adjacent to enemy hexes: ${allowedHexes.length} hexes');
+        } else {
+          // Handle board section restrictions (left third, middle third, right third)
+          allowedHexes = chexxState.getHexesForThird(hexTiles);
+          print('DEBUG HIGHLIGHT: Using third section "$hexTiles": ${allowedHexes.length} hexes');
+        }
+      }
 
       // Highlight hexes with current player's units (filtered by hex_tiles and unit_restrictions)
       final currentPlayer = chexxState.currentPlayer;
@@ -934,7 +1187,13 @@ class _CardGameScreenState extends State<CardGameScreen> {
                 if (unitRestriction.isNotEmpty && unitRestriction.toLowerCase() != 'all') {
                   final restrictionLower = unitRestriction.toLowerCase();
                   final unitTypeLower = unit.unitType.toLowerCase();
-                  if (!unitTypeLower.contains(restrictionLower)) {
+
+                  // Special case: "damaged" means health < maxHealth
+                  if (restrictionLower == 'damaged') {
+                    if (unit.health >= unit.maxHealth) {
+                      passesUnitRestriction = false;
+                    }
+                  } else if (!unitTypeLower.contains(restrictionLower)) {
                     passesUnitRestriction = false;
                   }
                 }
@@ -1036,11 +1295,446 @@ class _CardGameScreenState extends State<CardGameScreen> {
     }
   }
 
+  void _handleHealAction(int actionIndex, dynamic action) {
+    if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      chexxState.isCardActionActive = true;
+      chexxState.isCardActionUnitLocked = false;
+
+      print('Heal action activated - highlighting damaged units');
+
+      // Get hex_tiles restriction from action
+      final hexTiles = action['hex_tiles'] as String?;
+      chexxState.activeCardActionHexTiles = hexTiles;
+
+      // Get allowed hexes based on hex_tiles restriction
+      Set<core_hex.HexCoordinate>? allowedHexes;
+      if (hexTiles != null && hexTiles != 'none' && hexTiles != 'all') {
+        if (hexTiles.toLowerCase() == 'not adjacent') {
+          allowedHexes = chexxState.getHexesNotAdjacentToEnemyUnits();
+        } else if (hexTiles.toLowerCase() == 'adjacent to enemy units') {
+          allowedHexes = chexxState.getHexesAdjacentToEnemyUnits();
+        } else {
+          allowedHexes = chexxState.getHexesForThird(hexTiles);
+        }
+      }
+
+      // Highlight damaged units
+      final currentPlayer = chexxState.currentPlayer;
+      final damagedUnitHexes = <core_hex.HexCoordinate>{};
+
+      for (final unit in chexxState.simpleUnits) {
+        if (unit.owner == currentPlayer && unit.health < unit.maxHealth) {
+          // Skip units already used
+          if (usedUnitIds.contains(unit.id)) {
+            continue;
+          }
+
+          // Check hex restriction
+          if (allowedHexes == null || allowedHexes.contains(unit.position)) {
+            damagedUnitHexes.add(unit.position);
+          }
+        }
+      }
+
+      chexxState.highlightedHexes = damagedUnitHexes;
+      print('Highlighted ${damagedUnitHexes.length} damaged units for healing');
+
+      // Set up unit selection callback
+      chexxState.onUnitSelected = () {
+        if (chexxState.activeCardActionUnitId != null) {
+          usedUnitIds.add(chexxState.activeCardActionUnitId!);
+          print('Unit ${chexxState.activeCardActionUnitId} selected for healing');
+
+          // Complete unit_selection substep
+          _advanceSubStep(actionIndex, 'unit_selection');
+
+          // Perform healing
+          _performHealing(actionIndex, action);
+        }
+      };
+
+      _chexxGameEngine!.notifyListeners();
+    }
+  }
+
+  void _performHealing(int actionIndex, dynamic action) {
+    if (_chexxGameEngine == null) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+    final selectedUnitId = chexxState.activeCardActionUnitId;
+
+    if (selectedUnitId == null) {
+      print('ERROR: No unit selected for healing');
+      return;
+    }
+
+    // Find the selected unit
+    final selectedUnit = chexxState.simpleUnits.firstWhere(
+      (u) => u.id == selectedUnitId,
+      orElse: () => throw Exception('Selected unit not found: $selectedUnitId'),
+    );
+
+    print('Performing healing on unit ${selectedUnit.id} (${selectedUnit.unitType})');
+    print('Current health: ${selectedUnit.health}/${selectedUnit.maxHealth}');
+
+    // Get heal_dice_count from action
+    final healDiceCount = action['heal_dice_count'] as String?;
+    int diceToRoll = 4; // Default
+
+    if (healDiceCount == 'hand_size') {
+      // Roll 1 die per command card in hand (including the Medics & Mechanics card currently in play)
+      final currentPlayer = cardGameState.cardCurrentPlayer;
+      if (currentPlayer != null) {
+        // Hand size + 1 for the card being played (it was moved to inPlay zone)
+        diceToRoll = currentPlayer.hand.length + 1;
+      }
+    }
+
+    print('Rolling $diceToRoll dice for healing (hand size: ${cardGameState.cardCurrentPlayer?.hand.length})');
+
+    // Roll dice and count matching symbols/stars
+    int healingAmount = 0;
+    final diceResults = <String>[];
+
+    // TODO: Implement dice rolling for healing
+    // For now, use a placeholder healing amount
+    healingAmount = (diceToRoll / 2).floor(); // Average healing
+    print('TODO: Need to implement rollBattleDie() - using placeholder healing: $healingAmount');
+
+    // for (int i = 0; i < diceToRoll; i++) {
+    //   final result = chexxState.rollBattleDie();
+    //   diceResults.add(result);
+    //
+    //   // Check if die matches unit's symbol or is a star
+    //   final unitSymbol = selectedUnit.unitType.toLowerCase();
+    //   if (result.toLowerCase() == unitSymbol || result.toLowerCase() == 'star') {
+    //     healingAmount++;
+    //   }
+    // }
+
+    print('Dice results: ${diceResults.join(", ")}');
+    print('Healing amount: $healingAmount');
+
+    // Apply healing (capped at maxHealth)
+    final oldHealth = selectedUnit.health;
+    final newHealth = (selectedUnit.health + healingAmount).clamp(0, selectedUnit.maxHealth);
+    // TODO: SimpleGameUnit.health is read-only - need to implement a method to update health
+    // selectedUnit.health = newHealth;
+    final actualHealing = newHealth - oldHealth;
+    print('TODO: Need to implement unit health modification - would heal from $oldHealth to $newHealth');
+
+    print('Healed unit from $oldHealth to ${selectedUnit.health} HP (actual healing: $actualHealing)');
+
+    // Complete healing substep
+    _advanceSubStep(actionIndex, 'healing');
+
+    // If at least 1 HP was restored, allow the unit to continue with remaining substeps
+    // Otherwise, auto-complete remaining substeps
+    if (actualHealing > 0) {
+      print('Unit healed - can continue with remaining substeps');
+
+      // Set up callbacks for movement and combat
+      chexxState.onUnitMoved = () {
+        _advanceSubStep(actionIndex, 'before_combat_movement');
+
+        // Check if there are enemies in range
+        chexxState.calculateAttackRange(selectedUnit);
+        if (chexxState.attackRangeHexes.isEmpty) {
+          print('No enemies in attack range - auto-completing combat substep');
+          _advanceSubStep(actionIndex, 'combat');
+          _advanceSubStep(actionIndex, 'after_combat_movement');
+        } else {
+          chexxState.isCardActionUnitLocked = true;
+        }
+      };
+
+      chexxState.onCombatOccurred = () {
+        _advanceSubStep(actionIndex, 'combat');
+
+        // Auto-complete after-combat movement if no special movement
+        final moveAfterCombatBonus = action['move_after_combat'] as int? ?? 0;
+        if (moveAfterCombatBonus == 0 && selectedUnit.moveAfterCombat == 0) {
+          _advanceSubStep(actionIndex, 'after_combat_movement');
+        }
+      };
+
+      chexxState.onAfterCombatMovement = () {
+        _advanceSubStep(actionIndex, 'after_combat_movement');
+      };
+
+      // Keep unit highlighted for movement/combat
+      chexxState.highlightedHexes = {selectedUnit.position};
+    } else {
+      print('No healing occurred - auto-completing remaining substeps');
+      _advanceSubStep(actionIndex, 'before_combat_movement');
+      _advanceSubStep(actionIndex, 'combat');
+      _advanceSubStep(actionIndex, 'after_combat_movement');
+    }
+
+    _chexxGameEngine!.notifyListeners();
+    setState(() {});
+  }
+
+  void _handleTheirFinestHourAction(int actionIndex, dynamic action) {
+    if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      final currentPlayer = chexxState.currentPlayer;
+
+      print('Their Finest Hour action activated');
+
+      // Get dice count from action
+      final diceCountStr = action['dice_count'] as String?;
+      int diceToRoll = 4; // Default
+
+      if (diceCountStr == 'hand_size') {
+        // Roll 1 die per command card in hand (including the card being played)
+        final cardPlayer = cardGameState.cardCurrentPlayer;
+        if (cardPlayer != null) {
+          // Hand size + 1 for the card being played (it was moved to inPlay zone)
+          diceToRoll = cardPlayer.hand.length + 1;
+        }
+      }
+
+      print('Rolling $diceToRoll dice for Their Finest Hour (hand size: ${cardGameState.cardCurrentPlayer?.hand.length})');
+
+      // Roll dice and count results by unit type
+      final Map<String, int> unitTypeCounts = {};
+      int starCount = 0;
+      final diceResults = <String>[];
+
+      // TODO: Implement dice rolling - for now use placeholder
+      print('TODO: Need to implement rollBattleDie() - using placeholder results');
+      // Placeholder: assume average distribution
+      starCount = (diceToRoll / 6).floor();
+      unitTypeCounts['infantry'] = (diceToRoll / 6).floor();
+
+      // for (int i = 0; i < diceToRoll; i++) {
+      //   final result = chexxState.rollBattleDie();
+      //   diceResults.add(result);
+      //
+      //   final resultLower = result.toLowerCase();
+      //   if (resultLower == 'star') {
+      //     starCount++;
+      //   } else if (resultLower != 'grenade' && resultLower != 'flag') {
+      //     // Unit symbol rolled (infantry, tank, artillery, etc.)
+      //     unitTypeCounts[resultLower] = (unitTypeCounts[resultLower] ?? 0) + 1;
+      //   }
+      // }
+
+      print('Dice results: ${diceResults.join(", ")}');
+      print('Unit type counts: $unitTypeCounts');
+      print('Star count: $starCount');
+
+      // Check if reshuffle is needed
+      final shouldReshuffle = action['reshuffle'] as bool? ?? false;
+      if (shouldReshuffle) {
+        print('Reshuffling deck and discard pile');
+        // TODO: Implement deck reshuffle functionality in f_card_engine
+        print('TODO: Need to implement reshuffleDiscardIntoDeck() in DeckManager');
+        // cardGameState.cardGameState.deckManager.reshuffleDiscardIntoDeck();
+      }
+
+      // Generate actions based on dice results
+      final List<Map<String, dynamic>> newActions = [];
+
+      // Create actions for each unit type rolled
+      for (final entry in unitTypeCounts.entries) {
+        final unitType = entry.key;
+        final count = entry.value;
+
+        // Get matching units of this type
+        final matchingUnits = chexxState.simpleUnits
+            .where((u) => u.owner == currentPlayer &&
+                         !usedUnitIds.contains(u.id) &&
+                         u.unitType.toLowerCase().contains(unitType))
+            .toList();
+
+        print('Found ${matchingUnits.length} available $unitType units for $count dice rolls');
+
+        // Create one action per die rolled of this type (up to available units)
+        final unitsToOrder = count < matchingUnits.length ? count : matchingUnits.length;
+        for (int i = 0; i < unitsToOrder; i++) {
+          newActions.add({
+            'action_type': 'order',
+            'name': 'Order ${unitType.toUpperCase()}',
+            'unit_restrictions': unitType,
+            'hex_tiles': 'all',
+            'battle_die': '+1',
+            'generated_for_unit_id': matchingUnits[i].id,
+            'sub_steps': ['unit_selection', 'before_combat_movement', 'combat', 'after_combat_movement'],
+          });
+        }
+      }
+
+      // Create actions for stars (player can choose any unit)
+      for (int i = 0; i < starCount; i++) {
+        newActions.add({
+          'action_type': 'order',
+          'name': 'Order ANY (Star $i)',
+          'unit_restrictions': 'none',
+          'hex_tiles': 'all',
+          'battle_die': '+1',
+          'sub_steps': ['unit_selection', 'before_combat_movement', 'combat', 'after_combat_movement'],
+        });
+      }
+
+      print('Generated ${newActions.length} actions from Their Finest Hour dice rolls');
+
+      if (newActions.isNotEmpty) {
+        // Replace the current action with generated actions
+        setState(() {
+          generatedActions = newActions;
+          // Mark the original action as complete since it's been replaced
+          completedActions.add(actionIndex);
+          activeActionIndex = null;
+          // Reset sub-step tracking for the original action
+          actionCurrentSubStep.remove(actionIndex);
+          actionCompletedSubSteps.remove(actionIndex);
+        });
+      } else {
+        // No valid actions - complete the original action
+        print('No valid units to order - completing action');
+        setState(() {
+          completedActions.add(actionIndex);
+          activeActionIndex = null;
+          actionCurrentSubStep.remove(actionIndex);
+          actionCompletedSubSteps.remove(actionIndex);
+        });
+      }
+
+      _chexxGameEngine!.notifyListeners();
+    }
+  }
+
+  void _handleAirStrikeAction(int actionIndex, dynamic action) {
+    if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      chexxState.isCardActionActive = true;
+
+      // Get the current player and enemy player
+      final currentPlayer = chexxState.currentPlayer;
+      final enemyPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
+
+      // Get cluster index from action (0 = first strike, can target any enemy)
+      final clusterIndex = action['cluster_index'] as int? ?? 0;
+      print('Air Strike ${clusterIndex + 1} activated');
+
+      // Get dice per target from action (default 2 for Allied, could be 1 for Axis)
+      final dicePerTarget = action['dice_per_target'] as int? ?? 2;
+
+      // Store air strike action metadata for combat system to use
+      chexxState.activeBarrageAction = action;
+
+      // Get hex_tiles restriction
+      final hexTiles = action['hex_tiles'] as String?;
+      Set<core_hex.HexCoordinate> allowedHexes;
+
+      if (clusterIndex == 0) {
+        // First strike - can target ANY enemy unit
+        allowedHexes = chexxState.simpleUnits
+            .where((u) => u.owner == enemyPlayer)
+            .map((u) => u.position)
+            .toSet();
+        print('First air strike - can target any of ${allowedHexes.length} enemy units');
+      } else {
+        // Subsequent strikes - must be adjacent to cluster
+        if (hexTiles == 'adjacent_to_cluster' && airStrikeCluster.isNotEmpty) {
+          // Find all enemy units adjacent to any unit in the cluster
+          allowedHexes = {};
+          for (final clusterHex in airStrikeCluster) {
+            // Get neighbors of this hex (manually compute adjacent hexes)
+            // TODO: Implement getNeighbors() method in ChexxGameState
+            // For now, check all enemy units and see if they're adjacent
+            for (final unit in chexxState.simpleUnits) {
+              if (unit.owner == enemyPlayer) {
+                // Check if this unit is adjacent to the cluster hex
+                final dq = (unit.position.q - clusterHex.q).abs();
+                final dr = (unit.position.r - clusterHex.r).abs();
+                final ds = (unit.position.s - clusterHex.s).abs();
+                // In cube coordinates, adjacent hexes have max distance of 1
+                if (dq <= 1 && dr <= 1 && ds <= 1 && (dq + dr + ds) == 2) {
+                  allowedHexes.add(unit.position);
+                }
+              }
+            }
+          }
+          print('Air strike ${clusterIndex + 1} - ${allowedHexes.length} enemy units adjacent to cluster');
+        } else {
+          // No cluster yet or invalid hex_tiles - no valid targets
+          allowedHexes = {};
+          print('No valid targets for air strike ${clusterIndex + 1}');
+        }
+      }
+
+      chexxState.highlightedHexes = allowedHexes;
+      print('Highlighted ${allowedHexes.length} enemy hexes for air strike');
+      print('Air strike will attack with $dicePerTarget dice');
+
+      // Set up combat callback
+      chexxState.onCombatOccurred = () {
+        print('Air strike combat occurred');
+
+        // TODO: Track last combat target position
+        // For now, we can't add to cluster without this info
+        // if (chexxState.lastCombatTargetPosition != null) {
+        //   airStrikeCluster.add(chexxState.lastCombatTargetPosition!);
+        //   print('Added ${chexxState.lastCombatTargetPosition} to air strike cluster (size: ${airStrikeCluster.length})');
+        // }
+        print('TODO: Need lastCombatTargetPosition to track air strike cluster properly');
+
+        _advanceSubStep(actionIndex, 'combat');
+      };
+
+      _chexxGameEngine!.notifyListeners();
+    }
+  }
+
+  void _placeSandbagOnUnit(SimpleGameUnit unit) {
+    if (_chexxGameEngine == null) return;
+
+    final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+
+    print('Placing sandbag on unit ${unit.id} at ${unit.position}');
+
+    // Check if there's already a structure at this position
+    final existingStructure = chexxState.placedStructures.firstWhere(
+      (s) => s.position.q == unit.position.q &&
+             s.position.r == unit.position.r &&
+             s.position.s == unit.position.s,
+      orElse: () => throw Exception('No structure'),
+    );
+
+    try {
+      if (existingStructure.id.isNotEmpty) {
+        print('Structure already exists at ${unit.position} - not placing sandbag');
+        return;
+      }
+    } catch (e) {
+      // No existing structure, proceed with placement
+    }
+
+    // Create a sandbag structure
+    // Note: This assumes there's a sandbag structure type defined in the game
+    // You may need to look up the proper StructureType enum value
+    final sandbag = GameStructure(
+      id: 'sandbag_${unit.position.q}_${unit.position.r}_${unit.position.s}',
+      type: StructureType.sandbag,
+      position: unit.position,
+      // Note: GameStructure doesn't have an owner parameter
+    );
+
+    chexxState.placedStructures.add(sandbag);
+    print('Sandbag placed at ${unit.position}');
+
+    _chexxGameEngine!.notifyListeners();
+  }
+
   void _advanceSubStep(int actionIndex, String subStepName) {
     if (!mounted) return;
 
     setState(() {
-      final action = playedCard.card.actions![actionIndex];
+      final action = _getCurrentActions()![actionIndex];
       final subSteps = action['sub_steps'] as List?;
 
       if (subSteps == null) return;
@@ -1097,7 +1791,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       print('Infantry removed barbwire - cancelling remaining substeps');
 
       // Mark all remaining substeps as cancelled
-      final action = playedCard.card.actions![actionIndex];
+      final action = _getCurrentActions()![actionIndex];
       final subSteps = action['sub_steps'] as List?;
       if (subSteps != null) {
         final completedSteps = actionCompletedSubSteps[actionIndex] ?? {};
@@ -1117,7 +1811,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       _completeAction(actionIndex);
     } else {
       // Non-infantry units continue normally after removing barbwire
-      final action = playedCard.card.actions![actionIndex];
+      final action = _getCurrentActions()![actionIndex];
 
       // Check if there are any enemies in attack range
       chexxState.calculateAttackRange(unit);
@@ -1166,7 +1860,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       orElse: () => throw Exception('No selected unit'),
     );
 
-    final action = playedCard.card.actions![actionIndex];
+    final action = _getCurrentActions()![actionIndex];
 
     // Check if there are any enemies in attack range
     chexxState.calculateAttackRange(selectedUnit);
@@ -1226,7 +1920,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
       }
 
       // Check if all actions are complete
-      final totalActions = playedCard.card.actions?.length ?? 0;
+      final totalActions = _getCurrentActions()?.length ?? 0;
       if (completedActions.length >= totalActions) {
         // All actions complete - mark as ready but keep card visible until END TURN
         allActionsComplete = true;
@@ -1241,7 +1935,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
     final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
     final currentPlayer = chexxState.currentPlayer;
-    final action = playedCard.card.actions![actionIndex];
+    final action = _getCurrentActions()![actionIndex];
 
     return _checkActionHasValidUnits(action, chexxState, currentPlayer);
   }
@@ -1260,15 +1954,63 @@ class _CardGameScreenState extends State<CardGameScreen> {
   bool _checkActionHasValidUnits(dynamic action, ChexxGameState chexxState, Player currentPlayer) {
     // Get hex_tiles restriction for this action
     final hexTiles = action['hex_tiles'] as String?;
-    final allowedHexes = (hexTiles != null && hexTiles != 'none' && hexTiles != 'all')
-        ? chexxState.getHexesForThird(hexTiles)
-        : null;
+    Set<core_hex.HexCoordinate>? allowedHexes;
+    if (hexTiles != null && hexTiles != 'none' && hexTiles != 'all') {
+      // Handle special location restrictions
+      if (hexTiles.toLowerCase() == 'not adjacent') {
+        allowedHexes = chexxState.getHexesNotAdjacentToEnemyUnits();
+      } else if (hexTiles.toLowerCase() == 'adjacent to enemy units') {
+        allowedHexes = chexxState.getHexesAdjacentToEnemyUnits();
+      } else {
+        // Handle board section restrictions (left third, middle third, right third)
+        allowedHexes = chexxState.getHexesForThird(hexTiles);
+      }
+    }
+
+    // Get unit_restrictions from action (can be String or List<String>)
+    final unitRestriction = action['unit_restrictions'];
 
     // Check if any units are available for this action
     for (final unit in chexxState.simpleUnits) {
       if (unit.owner == currentPlayer) {
         // Skip units that have already been used
         if (usedUnitIds.contains(unit.id)) {
+          continue;
+        }
+
+        // Check unit_restrictions filter (supports both String and List<String>)
+        bool passesUnitRestriction = true;
+        if (unitRestriction != null) {
+          if (unitRestriction is String) {
+            // Handle String format
+            if (unitRestriction.isNotEmpty && unitRestriction.toLowerCase() != 'all' && unitRestriction.toLowerCase() != 'none') {
+              final restrictionLower = unitRestriction.toLowerCase();
+              final unitTypeLower = unit.unitType.toLowerCase();
+
+              // Special case: "damaged" means health < maxHealth
+              if (restrictionLower == 'damaged') {
+                if (unit.health >= unit.maxHealth) {
+                  passesUnitRestriction = false;
+                }
+              } else if (!unitTypeLower.contains(restrictionLower)) {
+                passesUnitRestriction = false;
+              }
+            }
+          } else if (unitRestriction is List) {
+            // Handle List<String> format
+            final restrictionList = unitRestriction.cast<String>();
+            if (restrictionList.isNotEmpty) {
+              final restrictionsLower = restrictionList.map((r) => r.toLowerCase()).toList();
+              final unitTypeLower = unit.unitType.toLowerCase();
+              // Check if unit type matches ANY restriction in the list
+              if (!restrictionsLower.any((r) => r == 'all' || r == 'none' || unitTypeLower.contains(r))) {
+                passesUnitRestriction = false;
+              }
+            }
+          }
+        }
+
+        if (!passesUnitRestriction) {
           continue;
         }
 
@@ -1426,7 +2168,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        '${action['action_type']}: ${action['hex_restrictions']} (${action['hex_tiles']})',
+                        '${action['name'] ?? action['action_type']}: ${action['unit_restrictions'] ?? 'all'} (${action['hex_tiles'] ?? 'all'})',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 9,
@@ -1443,10 +2185,166 @@ class _CardGameScreenState extends State<CardGameScreen> {
     );
   }
 
+  /// Build the card choice dialog for Recon card effect
+  /// Shows two cards and lets player choose one
+  Widget _buildCardChoiceDialog() {
+    return Container(
+      color: Colors.black.withOpacity(0.7), // Dark overlay
+      child: Center(
+        child: Container(
+          width: 600,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2a2a3e),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber, width: 2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title
+              const Text(
+                'Recon: Choose One Card',
+                style: TextStyle(
+                  color: Colors.amber,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Select one card to add to your hand. The other will be discarded.',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+
+              // Two card choices side by side
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < cardChoices.length; i++) ...[
+                    _buildCardChoiceOption(cardChoices[i], i),
+                    if (i < cardChoices.length - 1) const SizedBox(width: 32),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build a single card choice option
+  Widget _buildCardChoiceOption(dynamic cardInstance, int choiceIndex) {
+    final card = cardInstance.card;
+    return GestureDetector(
+      onTap: () => _selectReconCard(choiceIndex),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          width: 200,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1a1a2e),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.withOpacity(0.5), width: 2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Card name
+              Text(
+                card.name,
+                style: const TextStyle(
+                  color: Colors.amber,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+
+              // Card type
+              Text(
+                card.customData['type']?.toString().toUpperCase() ?? 'CARD',
+                style: TextStyle(
+                  color: _getCardTypeColor(card.customData['type'] as String?),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Card description
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  card.customData['description']?.toString() ?? '',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Choose button
+              ElevatedButton(
+                onPressed: () => _selectReconCard(choiceIndex),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                child: const Text('CHOOSE THIS CARD'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getCardTypeColor(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'attack':
+        return Colors.red;
+      case 'defense':
+        return Colors.blue;
+      case 'support':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
   void _endTurn() {
+    // Check if Recon card (card_23) was played - need to handle special card draw
+    bool reconCardPlayed = false;
+    if (playedCard != null) {
+      final cardData = playedCard.card.customData;
+      final endOfTurn = cardData['endOfTurn'] as String?;
+      if (endOfTurn == 'draw two and discard one') {
+        reconCardPlayed = true;
+        print('Recon card was played - will draw two cards for player to choose');
+      }
+    }
+
     // If there's a played card with incomplete actions, check if they can be auto-completed
     if (playedCard != null) {
-      final totalActions = playedCard.card.actions?.length ?? 0;
+      final totalActions = _getCurrentActions()?.length ?? 0;
       if (completedActions.length < totalActions) {
         // Get remaining action indices
         final remainingActionIndices = List.generate(totalActions, (i) => i)
@@ -1467,7 +2365,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
             for (final i in actionsToAutoComplete) {
               completedActions.add(i);
               // Mark all substeps as cancelled for these actions
-              final action = playedCard.card.actions![i];
+              final action = _getCurrentActions()![i];
               final subSteps = action['sub_steps'] as List?;
               if (subSteps != null) {
                 final cancelledSteps = actionCancelledSubSteps[i] ?? <int>{};
@@ -1505,7 +2403,11 @@ class _CardGameScreenState extends State<CardGameScreen> {
     }
 
     // End turn in f-card engine (checks if card was played)
-    final success = cardGameState.cardGameState.endTurn();
+    // Pass false for autoDraw if Recon card was played - we'll handle draw manually
+    final success = reconCardPlayed
+        ? cardGameState.cardGameState.endTurn(autoDraw: false)
+        : cardGameState.cardGameState.endTurn();
+
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1530,6 +2432,12 @@ class _CardGameScreenState extends State<CardGameScreen> {
       _chexxGameEngine!.endTurn();
     }
 
+    // Handle Recon card special draw
+    if (reconCardPlayed) {
+      _handleReconCardDraw();
+      return; // Don't clear state yet - wait for card selection
+    }
+
     setState(() {
       selectedCard = null; // Clear selected card for next turn
       playedCard = null;
@@ -1538,6 +2446,108 @@ class _CardGameScreenState extends State<CardGameScreen> {
       actionCompletedSubSteps.clear();
       actionCancelledSubSteps.clear();
       usedUnitIds.clear(); // Clear unit usage tracking for next turn
+      airStrikeCluster.clear(); // Clear air strike cluster for next turn
+      allActionsComplete = false; // Reset button color for next turn
+      activeActionIndex = null;
+    });
+  }
+
+  /// Handle the special card draw for Recon card (card_23)
+  /// Draw two cards and let player choose one, discard the other
+  void _handleReconCardDraw() {
+    final deckManager = widget.gamePlugin.deckManager;
+    final currentPlayer = cardGameState.cardCurrentPlayer;
+
+    if (currentPlayer == null) {
+      print('ERROR: No current player for Recon card draw');
+      return;
+    }
+
+    // Check if deck has at least 2 cards
+    if (deckManager.cardsRemaining < 2) {
+      print('Not enough cards in deck for Recon draw (need 2, have ${deckManager.cardsRemaining})');
+      // Fall back to normal draw if available
+      if (deckManager.cardsRemaining == 1) {
+        deckManager.drawCard(currentPlayer);
+      }
+      _finishTurn();
+      return;
+    }
+
+    // Draw two cards temporarily to hand
+    final initialHandSize = currentPlayer.hand.length;
+    deckManager.drawCard(currentPlayer);
+    deckManager.drawCard(currentPlayer);
+
+    // Get the two newly drawn cards (last two in hand)
+    if (currentPlayer.hand.length < initialHandSize + 2) {
+      print('ERROR: Failed to draw 2 cards for Recon effect');
+      _finishTurn();
+      return;
+    }
+
+    final card1 = currentPlayer.hand[currentPlayer.hand.length - 2];
+    final card2 = currentPlayer.hand[currentPlayer.hand.length - 1];
+
+    // Remove both cards from hand temporarily
+    currentPlayer.hand.removeLast();
+    currentPlayer.hand.removeLast();
+
+    // Show card choice UI
+    setState(() {
+      isWaitingForCardChoice = true;
+      cardChoices = [card1, card2];
+    });
+
+    print('Recon: Showing player two cards to choose from');
+    print('Card 1: ${card1.card.name}');
+    print('Card 2: ${card2.card.name}');
+  }
+
+  /// Called when player selects one of the two cards from Recon draw
+  void _selectReconCard(int choiceIndex) {
+    if (choiceIndex < 0 || choiceIndex >= cardChoices.length) {
+      print('ERROR: Invalid card choice index: $choiceIndex');
+      return;
+    }
+
+    final selectedCard = cardChoices[choiceIndex];
+    final discardedCard = cardChoices[1 - choiceIndex]; // Get the other card
+    final currentPlayer = cardGameState.cardCurrentPlayer;
+
+    if (currentPlayer == null) {
+      print('ERROR: No current player when selecting Recon card');
+      return;
+    }
+
+    // Add selected card to player's hand
+    currentPlayer.hand.add(selectedCard);
+    print('Recon: Player chose ${selectedCard.card.name}');
+
+    // Discard the other card
+    cardGameState.cardGameState.discardPile.add(discardedCard);
+    print('Recon: Discarded ${discardedCard.card.name}');
+
+    // Clear card choice state and finish turn
+    setState(() {
+      isWaitingForCardChoice = false;
+      cardChoices.clear();
+    });
+
+    _finishTurn();
+  }
+
+  /// Finish the turn after all end-of-turn effects are complete
+  void _finishTurn() {
+    setState(() {
+      selectedCard = null; // Clear selected card for next turn
+      playedCard = null;
+      completedActions.clear();
+      actionCurrentSubStep.clear();
+      actionCompletedSubSteps.clear();
+      actionCancelledSubSteps.clear();
+      usedUnitIds.clear(); // Clear unit usage tracking for next turn
+      airStrikeCluster.clear(); // Clear air strike cluster for next turn
       allActionsComplete = false; // Reset button color for next turn
       activeActionIndex = null;
     });
@@ -1631,9 +2641,15 @@ class _CardModeChexxGameScreenState extends State<_CardModeChexxGameScreen> {
   @override
   void initState() {
     super.initState();
+    // Ensure game_type is set to 'card' for card game mode
+    final cardScenarioConfig = widget.scenarioConfig != null
+        ? Map<String, dynamic>.from(widget.scenarioConfig!)
+        : <String, dynamic>{};
+    cardScenarioConfig['game_type'] = 'card'; // Override to ensure dice rolls persist
+
     gameEngine = ChexxGameEngine(
       gamePlugin: ChexxPlugin(),
-      scenarioConfig: widget.scenarioConfig,
+      scenarioConfig: cardScenarioConfig,
     );
     widget.onEngineCreated(gameEngine); // Pass engine to parent
   }

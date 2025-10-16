@@ -262,6 +262,15 @@ class _ChexxGameScreenState extends State<ChexxGameScreen> {
             ),
           ),
 
+        // Dice roll display for barrage attacks (no selected unit)
+        if (_getSelectedUnit(gameState) == null && gameState.shouldShowDiceRoll && gameState.lastDiceRolls != null)
+          Positioned(
+            // In card mode, position lower to avoid overlapping card info
+            top: gameState.gameMode == 'card' ? 340 : 80,
+            right: 16,
+            child: _buildDiceRollDisplay(gameState),
+          ),
+
         // Settings panel
         if (_showSettingsPanel)
           Positioned(

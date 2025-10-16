@@ -6,16 +6,18 @@
   "imageAsset": "",
   "actions": [
     {
-      "action_type": "Air Power",
-      "unit_restrictions": "adjacent",
-      "hex_tiles": "up to 4",
-      "overrides": {
-        "attack_damage": [
-          2
-	]
-      },
+      "action_type": "their_finest_hour",
+      "unit_restrictions": "none",
+      "hex_tiles": "all",
+      "battle_die": "+1",
+      "dice_count": "hand_size",
+      "reshuffle": true,
       "sub_steps": [
-        "combat"
+        "dice_roll",
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
       ]
     }
   ]

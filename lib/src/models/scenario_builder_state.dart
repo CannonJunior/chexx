@@ -191,8 +191,8 @@ class ScenarioBuilderState extends ChangeNotifier {
   bool isCreateNewMode = false;
   bool isRemoveMode = false;
 
-  // Hexagon orientation setting
-  HexOrientation hexOrientation = HexOrientation.flat;
+  // Hexagon orientation setting (default to pointy)
+  HexOrientation hexOrientation = HexOrientation.pointy;
 
   // Selected placed unit for info display
   PlacedUnit? selectedPlacedUnit;
@@ -1040,6 +1040,10 @@ class ScenarioBuilderState extends ChangeNotifier {
       'player2_points': player2WinPoints,
     };
 
+    // Save hex orientation (flat or pointy)
+    baseConfig['hex_orientation'] = hexOrientation == HexOrientation.flat ? 'flat' : 'pointy';
+    print('DEBUG: Saving hex orientation: ${baseConfig['hex_orientation']}');
+
     return baseConfig;
   }
 
@@ -1348,6 +1352,22 @@ class ScenarioBuilderState extends ChangeNotifier {
         } catch (e) {
           print('Error loading win conditions: $e');
         }
+      }
+
+      // Load hex orientation (default to pointy if not saved)
+      if (scenarioData.containsKey('hex_orientation')) {
+        try {
+          final orientationString = scenarioData['hex_orientation'] as String;
+          hexOrientation = orientationString == 'flat' ? HexOrientation.flat : HexOrientation.pointy;
+          print('Successfully loaded hex orientation: $orientationString');
+        } catch (e) {
+          print('Error loading hex orientation: $e, defaulting to pointy');
+          hexOrientation = HexOrientation.pointy;
+        }
+      } else {
+        // Default to pointy if no orientation is saved
+        hexOrientation = HexOrientation.pointy;
+        print('No hex orientation in scenario, defaulting to pointy');
       }
 
       print('Successfully loaded scenario: $scenarioName with ${board.allTiles.length} tiles, ${placedUnits.length} units, ${placedStructures.length} structures, and ${metaHexes.length} meta hexes');

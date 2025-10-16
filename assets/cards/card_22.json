@@ -1,0 +1,57 @@
+{
+  "id": "card_22",
+  "name": "Air Power",
+  "description": "Target a group of 4 or fewer enemy units adjacent to each other. Roll 2 battle die per hex (Allied air attack) or 1 per hex (Axis air attack), ignoring any terrain battle die reduction. Score 1 hit for each die that matches the unit's symbol, a grenade or a star. For each flag, retreat 1 hex. Flags may not be ignored.",
+  "type": "attack",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "air_strike",
+      "name": "Air Strike 1",
+      "unit_restrictions": "enemy",
+      "hex_tiles": "all",
+      "dice_per_target": 2,
+      "ignore_terrain": true,
+      "cluster_index": 0,
+      "sub_steps": [
+        "combat"
+      ]
+    },
+    {
+      "action_type": "air_strike",
+      "name": "Air Strike 2",
+      "unit_restrictions": "enemy",
+      "hex_tiles": "adjacent_to_cluster",
+      "dice_per_target": 2,
+      "ignore_terrain": true,
+      "cluster_index": 1,
+      "sub_steps": [
+        "combat"
+      ]
+    },
+    {
+      "action_type": "air_strike",
+      "name": "Air Strike 3",
+      "unit_restrictions": "enemy",
+      "hex_tiles": "adjacent_to_cluster",
+      "dice_per_target": 2,
+      "ignore_terrain": true,
+      "cluster_index": 2,
+      "sub_steps": [
+        "combat"
+      ]
+    },
+    {
+      "action_type": "air_strike",
+      "name": "Air Strike 4",
+      "unit_restrictions": "enemy",
+      "hex_tiles": "adjacent_to_cluster",
+      "dice_per_target": 2,
+      "ignore_terrain": true,
+      "cluster_index": 3,
+      "sub_steps": [
+        "combat"
+      ]
+    }
+  ]
+}

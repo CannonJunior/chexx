@@ -1,9 +1,11 @@
 {
   "id": "card_13",
   "name": "Ambush",
-  "description": "After opponent declares a Close Assault, but before he rolls his battle dice, play this card. Roll your battle dice first. If opponent's unit wasn't eliminated or forced to retreat, it may then attack normally. At the end of the turn, draw your Command card first..",
+  "description": "After opponent declares a Close Assault, but before he rolls his battle dice, play this card. Roll your battle dice first. If opponent's unit wasn't eliminated or forced to retreat, it may then attack normally. At the end of the turn, draw your Command card first.",
   "cost": 8,
-  "type": "support",
+  "type": "reaction",
+  "reactive": true,
+  "trigger": "enemy_close_assault",
   "attributes": {
     "power": 5,
     "rarity": "common"
@@ -11,25 +13,12 @@
   "imageAsset": "",
   "actions": [
     {
-      "action_type": "order",
-      "hex_restrictions": "none",
-      "hex_tiles": "middle third",
+      "action_type": "ambush_counter",
+      "unit_restrictions": "adjacent_to_attacker",
+      "hex_tiles": "all",
       "sub_steps": [
         "unit_selection",
-        "before_combat_movement",
-        "combat",
-        "after_combat_movement"
-      ]
-    },
-    {
-      "action_type": "order",
-      "hex_restrictions": "none",
-      "hex_tiles": "middle third",
-      "sub_steps": [
-        "unit_selection",
-        "before_combat_movement",
-        "combat",
-        "after_combat_movement"
+        "combat"
       ]
     }
   ]

@@ -1,0 +1,22 @@
+{
+  "id": "card_23",
+  "name": "Recon",
+  "description": "Issue an order to 1 unit on the Left Flank. When drawing a new Command card, draw two, choose one and discard the other.",
+  "cost": 8,
+  "type": "support",
+  "endOfTurn": "draw two and discard one",
+  "imageAsset": "",
+  "actions": [
+    {
+      "action_type": "order",
+      "hex_restrictions": "none",
+      "hex_tiles": "left third",
+      "sub_steps": [
+        "unit_selection",
+        "before_combat_movement",
+        "combat",
+        "after_combat_movement"
+      ]
+    }
+  ]
+}

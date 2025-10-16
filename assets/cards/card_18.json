@@ -12,7 +12,7 @@
       "sub_steps": [
         "unit_selection",
         "combat",
-        "place sandbag"
+        "place_sandbag"
       ]
     },
     {
@@ -22,7 +22,7 @@
       "sub_steps": [
         "unit_selection",
         "combat",
-        "place sandbag"
+        "place_sandbag"
       ]
     },
     {
@@ -32,7 +32,7 @@
       "sub_steps": [
         "unit_selection",
         "combat",
-        "place sandbag"
+        "place_sandbag"
       ]
     },
     {
@@ -42,7 +42,7 @@
       "sub_steps": [
         "unit_selection",
         "combat",
-        "place sandbag"
+        "place_sandbag"
       ]
     }
   ]
