@@ -242,7 +242,7 @@ class ChexxGameEngine extends GameEngineBase {
 
         notifyListeners();
       } else {
-        // Enemy unit - try to attack if we have a selected unit
+        // Enemy unit - try to attack if we have a selected unit OR barrage action
         SimpleGameUnit? selectedUnit;
         for (final unit in chexxGameState.simpleUnits) {
           if (unit.isSelected) {
@@ -251,42 +251,54 @@ class ChexxGameEngine extends GameEngineBase {
           }
         }
 
-        if (selectedUnit != null) {
+        // Check if this is a barrage attack (no selected unit, but barrage action active)
+        final isBarrageAttack = selectedUnit == null && chexxGameState.activeBarrageAction != null;
+
+        if (selectedUnit != null || isBarrageAttack) {
           // In card mode, require an active card action AND correct unit
           if (chexxGameState.gameMode == 'card') {
             if (!chexxGameState.isCardActionActive) {
               print('Cannot attack - play a card action first');
               return;
             }
-            // In card mode, can only attack if this is the unit performing the action
-            if (chexxGameState.activeCardActionUnitId != null &&
-                chexxGameState.activeCardActionUnitId != selectedUnit.id) {
+            // In card mode with unit-based attacks, verify it's the correct unit
+            if (!isBarrageAttack &&
+                chexxGameState.activeCardActionUnitId != null &&
+                chexxGameState.activeCardActionUnitId != selectedUnit!.id) {
               print('Cannot attack - must use the unit performing the card action');
               return;
             }
           }
 
-          final distance = selectedUnit.position.distanceTo(hexCoord);
-          final attackRange = _getUnitAttackRange(selectedUnit.unitType);
-
-          print('DEBUG: Attack validation - Unit: ${selectedUnit.unitType}, Distance: $distance, Attack Range: $attackRange');
-
-          if (distance <= attackRange) {
+          // For barrage, skip distance check (can target any enemy)
+          // For normal attacks, validate distance
+          if (isBarrageAttack || (selectedUnit != null && selectedUnit.position.distanceTo(hexCoord) <= _getUnitAttackRange(selectedUnit.unitType))) {
             // Two-click attack system: first click targets, second click confirms
             if (chexxGameState.targetedEnemy == unitAtPosition) {
               // Second click on same enemy - perform attack
               print('Confirming attack on ${unitAtPosition.unitType}');
 
               // Check if this is a special attack by a tank (after overrun)
-              final isSpecialAttack = selectedUnit.unitType == 'armor' &&
+              final isSpecialAttack = !isBarrageAttack &&
+                                     selectedUnit!.unitType == 'armor' &&
                                      (chexxGameState.unitCanSpecialAttack[selectedUnit.id] ?? false) &&
                                      !(chexxGameState.unitUsedSpecialAttack[selectedUnit.id] ?? false);
 
-              // Attack the target unit
-              // Roll dice for attack
-              final diceRollResults = _performDiceBasedAttack(selectedUnit, unitAtPosition);
-              final damage = diceRollResults.$1;
-              final diceRolls = diceRollResults.$2;
+              // Attack the target unit - handle both normal and barrage attacks
+              late int damage;
+              late List<DieFace> diceRolls;
+
+              if (isBarrageAttack) {
+                // Barrage attack: no attacker, use dice from card action
+                final barrageResult = _performBarrageDiceAttack(unitAtPosition);
+                damage = barrageResult.$1;
+                diceRolls = barrageResult.$2;
+              } else {
+                // Normal attack: use attacker unit
+                final diceRollResults = _performDiceBasedAttack(selectedUnit!, unitAtPosition);
+                damage = diceRollResults.$1;
+                diceRolls = diceRollResults.$2;
+              }
 
               // Count retreat dice
               final retreatDiceCount = diceRolls.where((die) => die.unitType == 'retreat').length;
@@ -298,13 +310,15 @@ class ChexxGameEngine extends GameEngineBase {
               chexxGameState.recordDiceRoll(diceRolls, result);
               final newHealth = (unitAtPosition.health - damage).clamp(0, unitAtPosition.maxHealth).toInt();
 
-              if (isSpecialAttack) {
-                print('${selectedUnit.unitType} makes SPECIAL ATTACK on ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
+              if (isBarrageAttack) {
+                print('BARRAGE attacks ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
+              } else if (isSpecialAttack) {
+                print('${selectedUnit!.unitType} makes SPECIAL ATTACK on ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
                 // Mark special attack as used and clear the ability
                 chexxGameState.unitUsedSpecialAttack[selectedUnit.id] = true;
                 chexxGameState.unitCanSpecialAttack[selectedUnit.id] = false;
               } else {
-                print('${selectedUnit.unitType} attacks ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
+                print('${selectedUnit!.unitType} attacks ${unitAtPosition.unitType} for $damage damage (dice: ${diceRolls.map((d) => d.symbol).join(', ')})');
               }
 
               // Notify card game if in card mode (combat occurred)
@@ -322,12 +336,18 @@ class ChexxGameEngine extends GameEngineBase {
                 chexxGameState.simpleUnits.remove(unitAtPosition);
                 print('${unitAtPosition.unitType} destroyed!');
 
-                // Award point to the attacking player
-                chexxGameState.awardPoints(selectedUnit.owner, 1);
+                // Award point to the attacking player (barrage awards to current player)
+                if (isBarrageAttack) {
+                  chexxGameState.awardPoints(chexxGameState.currentPlayer, 1);
+                } else {
+                  chexxGameState.awardPoints(selectedUnit!.owner, 1);
+                }
 
                 // Combat movement: Infantry and Armor gain movement points but don't auto-move
-                // ONLY if the killed enemy was adjacent (distance 1)
-                if ((selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry') && distance == 1) {
+                // ONLY if the killed enemy was adjacent (distance 1) AND not a barrage attack
+                if (!isBarrageAttack && selectedUnit != null && (selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry')) {
+                  final distance = selectedUnit.position.distanceTo(hexCoord);
+                  if (distance == 1) {
                   // Calculate move_after_combat: base value + bonus from card action
                   final moveAfterCombat = selectedUnit.moveAfterCombat +
                                          (chexxGameState.unitMoveAfterCombatBonus[selectedUnit.id] ?? 0);
@@ -376,6 +396,7 @@ class ChexxGameEngine extends GameEngineBase {
                   // Note: after_combat_movement sub-step will complete when:
                   // 1. Player moves the unit (onUnitMoved callback)
                   // 2. Player deselects the unit without moving (handled below)
+                  }
                 }
               } else {
                 // Update damaged unit
@@ -441,15 +462,19 @@ class ChexxGameEngine extends GameEngineBase {
               chexxGameState.attackRangeHexes.clear();
 
               // Auto-complete after_combat_movement sub-step if not applicable
-              // Conditions: enemy not killed, wrong unit type, or enemy killed at distance > 1
-              final canAfterCombatMove = enemyKilled &&
+              // Conditions: enemy not killed, wrong unit type, enemy killed at distance > 1, or barrage attack
+              final canAfterCombatMove = !isBarrageAttack &&
+                                         enemyKilled &&
+                                         selectedUnit != null &&
                                          (selectedUnit.unitType == 'armor' || selectedUnit.unitType == 'infantry') &&
-                                         distance == 1;
+                                         selectedUnit.position.distanceTo(hexCoord) == 1;
 
               if (!canAfterCombatMove) {
                 if (chexxGameState.gameMode == 'card' && chexxGameState.onAfterCombatMovement != null) {
-                  if (enemyKilled && distance > 1) {
-                    print('Enemy killed at distance $distance - no after-combat movement (only works at distance 1)');
+                  if (isBarrageAttack) {
+                    print('Barrage attack - no after-combat movement');
+                  } else if (enemyKilled && selectedUnit != null && selectedUnit.position.distanceTo(hexCoord) > 1) {
+                    print('Enemy killed at distance ${selectedUnit.position.distanceTo(hexCoord)} - no after-combat movement (only works at distance 1)');
                   } else if (!enemyKilled) {
                     print('Enemy survived - no after-combat movement');
                   } else {
@@ -457,6 +482,12 @@ class ChexxGameEngine extends GameEngineBase {
                   }
                   chexxGameState.onAfterCombatMovement!();
                 }
+              }
+
+              // Clear barrage action after combat completes
+              if (isBarrageAttack) {
+                chexxGameState.activeBarrageAction = null;
+                print('Barrage action cleared');
               }
 
               // Don't complete the action yet - let sub-step tracking handle it
@@ -467,6 +498,9 @@ class ChexxGameEngine extends GameEngineBase {
               notifyListeners();
             }
           } else {
+            // Calculate values for error message
+            final distance = selectedUnit!.position.distanceTo(hexCoord);
+            final attackRange = _getUnitAttackRange(selectedUnit.unitType);
             print('Target out of range (distance: $distance, range: $attackRange)');
           }
         }
@@ -705,6 +739,8 @@ class ChexxGameEngine extends GameEngineBase {
 
   /// Perform dice-based attack using WWII combat system
   (int, List<DieFace>) _performDiceBasedAttack(SimpleGameUnit attacker, SimpleGameUnit defender) {
+    final chexxGameState = gameState as ChexxGameState;
+
     // Calculate distance for attack_damage array indexing
     final distance = attacker.position.distanceTo(defender.position);
 
@@ -715,12 +751,28 @@ class ChexxGameEngine extends GameEngineBase {
     final arrayIndex = (distance - 1).clamp(0, attackDamageArray.length - 1);
     final baseDice = attackDamageArray[arrayIndex];
 
-    // TODO: Apply modifiers from tile type, structures, and card bonuses
-    // For now, just use base dice count
-    final numDice = baseDice;
+    // Check for battle_die modifier from card overrides
+    int battleDieModifier = 0;
+    if (chexxGameState.unitOverrides.containsKey(attacker.id)) {
+      final overrides = chexxGameState.unitOverrides[attacker.id]!;
+      if (overrides.containsKey('battle_die')) {
+        final battleDieValue = overrides['battle_die'];
+        // Parse "+1" or similar format
+        if (battleDieValue is String) {
+          final cleaned = battleDieValue.replaceAll('+', '').trim();
+          battleDieModifier = int.tryParse(cleaned) ?? 0;
+        } else if (battleDieValue is int) {
+          battleDieModifier = battleDieValue;
+        }
+        print('DEBUG: battle_die modifier found: $battleDieValue -> $battleDieModifier');
+      }
+    }
+
+    // Apply battle_die modifier to dice count
+    final numDice = baseDice + battleDieModifier;
 
     print('DEBUG: ${attacker.unitType} attacking at distance $distance');
-    print('DEBUG: attack_damage array: $attackDamageArray, index: $arrayIndex, dice: $numDice');
+    print('DEBUG: attack_damage array: $attackDamageArray, index: $arrayIndex, base dice: $baseDice, modifier: $battleDieModifier, total: $numDice');
 
     // Roll dice
     final diceRolls = <DieFace>[];
@@ -733,6 +785,51 @@ class ChexxGameEngine extends GameEngineBase {
       diceRolls.add(dieFace);
 
       // Calculate damage based on die face type
+      final damage = _calculateDamageFromDieFace(dieFace, defender);
+      totalDamage += damage;
+      print('DEBUG: Die ${i+1}: rolled $roll -> ${dieFace.symbol} (${dieFace.unitType}) = $damage damage');
+    }
+
+    print('DEBUG: Total: ${diceRolls.length} dice rolled, $totalDamage total damage');
+
+    return (totalDamage, diceRolls);
+  }
+
+  /// Perform barrage attack using dice from card action
+  (int, List<DieFace>) _performBarrageDiceAttack(SimpleGameUnit defender) {
+    final chexxGameState = gameState as ChexxGameState;
+    final barrageAction = chexxGameState.activeBarrageAction!;
+
+    // Get attack_damage from barrage action overrides
+    final overrides = barrageAction['overrides'] as Map<String, dynamic>?;
+    final attackDamageList = overrides?['attack_damage'] as List?;
+
+    // Extract dice count (should be a single value like [4])
+    final numDice = (attackDamageList != null && attackDamageList.isNotEmpty)
+        ? (attackDamageList[0] as int)
+        : 1; // Fallback to 1 die
+
+    // Get ignore flags for terrain/structure modifiers
+    final ignoreTerrain = barrageAction['ignore_terrain'] as bool? ?? false;
+    final ignoreStructure = barrageAction['ignore_structure'] as bool? ?? false;
+
+    print('DEBUG: BARRAGE attack with $numDice dice (ignore_terrain: $ignoreTerrain, ignore_structure: $ignoreStructure)');
+
+    // TODO: Use ignoreTerrain and ignoreStructure flags when terrain/structure modifiers are implemented
+    // These flags would be passed to dice rolling or damage calculation to bypass defensive bonuses
+
+    // Roll dice
+    final diceRolls = <DieFace>[];
+    final random = Random();
+    int totalDamage = 0;
+
+    for (int i = 0; i < numDice; i++) {
+      final roll = random.nextInt(6) + 1; // 1-6
+      final dieFace = _getDieFaceForRoll(roll);
+      diceRolls.add(dieFace);
+
+      // Calculate damage based on die face type
+      // NOTE: When terrain/structure modifiers are implemented, pass ignoreTerrain and ignoreStructure
       final damage = _calculateDamageFromDieFace(dieFace, defender);
       totalDamage += damage;
       print('DEBUG: Die ${i+1}: rolled $roll -> ${dieFace.symbol} (${dieFace.unitType}) = $damage damage');

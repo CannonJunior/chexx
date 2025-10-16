@@ -9,10 +9,12 @@
       "action_type": "barrage",
       "unit_restrictions": "none",
       "hex_tiles": "all",
+      "ignore_terrain": true,
+      "ignore_structure": true,
       "overrides": {
         "attack_damage": [
           4
-	]
+        ]
       },
       "sub_steps": [
         "combat"

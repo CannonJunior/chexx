@@ -353,6 +353,49 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
       _chexxGameEngine!.notifyListeners();
       print('Card played - highlights will be set when action is clicked');
+
+      // Check if card has "type": "all" - if so, generate one action per matching unit
+      if (card.card.type == 'all' && card.card.actions != null && card.card.actions!.isNotEmpty) {
+        print('Card has type "all" - generating actions for each matching unit');
+        final currentPlayer = chexxState.currentPlayer;
+        final templateAction = card.card.actions![0]; // Use first action as template
+        final unitRestriction = templateAction['unit_restrictions']; // Can be String or List
+        final hexTiles = templateAction['hex_tiles'] as String?;
+
+        // Get all matching units for this player
+        List<SimpleGameUnit> matchingUnits = chexxState.getUnitsMatchingRestriction(unitRestriction, currentPlayer);
+        print('Found ${matchingUnits.length} units matching restriction: $unitRestriction');
+
+        // If hex_tiles has a location restriction, filter the matching units
+        if (hexTiles != null) {
+          if (hexTiles.toLowerCase() == 'adjacent to enemy units') {
+            final adjacentHexes = chexxState.getHexesAdjacentToEnemyUnits();
+            matchingUnits = matchingUnits.where((unit) => adjacentHexes.contains(unit.position)).toList();
+            print('Filtered to ${matchingUnits.length} units adjacent to enemy units');
+          } else if (hexTiles.toLowerCase() == 'not adjacent') {
+            final notAdjacentHexes = chexxState.getHexesNotAdjacentToEnemyUnits();
+            matchingUnits = matchingUnits.where((unit) => notAdjacentHexes.contains(unit.position)).toList();
+            print('Filtered to ${matchingUnits.length} units not adjacent to enemy units');
+          }
+        }
+
+        if (matchingUnits.isNotEmpty) {
+          // Generate one action per matching unit
+          final generatedActions = matchingUnits.map((unit) {
+            // Clone the template action and set unit-specific restrictions
+            final actionCopy = Map<String, dynamic>.from(templateAction);
+            actionCopy['generated_for_unit_id'] = unit.id; // Track which unit this action is for
+            actionCopy['unit_restrictions'] = unit.unitType; // Lock to this specific unit type
+            print('Generated action for unit ${unit.id} (${unit.unitType})');
+            return actionCopy;
+          }).toList();
+
+          card.card.actions = generatedActions;
+          print('Generated ${generatedActions.length} actions from "all" type card');
+        } else {
+          print('No matching units found for "all" type card - will use fallback');
+        }
+      }
     }
 
     // Check if any actions on this card have valid units
@@ -666,6 +709,13 @@ class _CardGameScreenState extends State<CardGameScreen> {
     // Apply special attributes from action (if any)
     _applySpecialAttributes(action);
 
+    // Check if this is a "barrage" action (direct combat without unit selection)
+    final actionType = action['action_type'] as String?;
+    if (actionType == 'barrage') {
+      _handleBarrageAction(actionIndex, action);
+      return;
+    }
+
     // Enable card action mode and highlight player's unit hexes
     if (_chexxGameEngine != null) {
       final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
@@ -838,57 +888,95 @@ class _CardGameScreenState extends State<CardGameScreen> {
       print('DEBUG HIGHLIGHT: hex_tiles restriction: $hexTiles');
       print('DEBUG HIGHLIGHT: Allowed hexes count: ${allowedHexes?.length ?? "null (no restriction)"}');
 
-      // Get unit_restrictions from action
-      final unitRestriction = action['unit_restrictions'] as String?;
-      print('DEBUG HIGHLIGHT: unit_restrictions: ${unitRestriction ?? "none"}');
+      // Check if this action was generated for a specific unit
+      final generatedForUnitId = action['generated_for_unit_id'] as String?;
+      if (generatedForUnitId != null) {
+        print('DEBUG HIGHLIGHT: Action generated for specific unit: $generatedForUnitId');
+        // Only highlight the specific unit this action was generated for
+        final targetUnit = chexxState.simpleUnits.firstWhere(
+          (u) => u.id == generatedForUnitId,
+          orElse: () => throw Exception('Generated unit not found: $generatedForUnitId'),
+        );
+        if (targetUnit.owner == currentPlayer && !usedUnitIds.contains(targetUnit.id)) {
+          playerUnitHexes.add(targetUnit.position);
+          print('  - ADDED specific unit ${targetUnit.id} to highlights');
+        } else {
+          print('  - SKIPPED: Unit already used or not owned by current player');
+        }
+      } else {
+        // Get unit_restrictions from action (can be String or List<String>)
+        final unitRestriction = action['unit_restrictions']; // Can be String or List
+        print('DEBUG HIGHLIGHT: unit_restrictions: ${unitRestriction ?? "none"}');
 
-      int totalPlayerUnits = 0;
-      int skippedBecauseUsed = 0;
-      int skippedBecauseUnitRestriction = 0;
-      int skippedBecauseHexTiles = 0;
-      int added = 0;
+        int totalPlayerUnits = 0;
+        int skippedBecauseUsed = 0;
+        int skippedBecauseUnitRestriction = 0;
+        int skippedBecauseHexTiles = 0;
+        int added = 0;
 
-      for (final unit in chexxState.simpleUnits) {
-        if (unit.owner == currentPlayer) {
-          totalPlayerUnits++;
-          print('DEBUG HIGHLIGHT: Checking unit ${unit.id} (${unit.unitType}) at ${unit.position}, remainingMovement=${unit.remainingMovement}');
+        for (final unit in chexxState.simpleUnits) {
+          if (unit.owner == currentPlayer) {
+            totalPlayerUnits++;
+            print('DEBUG HIGHLIGHT: Checking unit ${unit.id} (${unit.unitType}) at ${unit.position}, remainingMovement=${unit.remainingMovement}');
 
-          // Skip units that have already been used for an action on this card
-          if (usedUnitIds.contains(unit.id)) {
-            skippedBecauseUsed++;
-            print('  - SKIPPED: Already used');
-            continue;
-          }
-
-          // Check unit_restrictions filter
-          if (unitRestriction != null && unitRestriction.isNotEmpty && unitRestriction.toLowerCase() != 'all') {
-            final restrictionLower = unitRestriction.toLowerCase();
-            final unitTypeLower = unit.unitType.toLowerCase();
-            if (!unitTypeLower.contains(restrictionLower)) {
-              skippedBecauseUnitRestriction++;
-              print('  - SKIPPED: Unit type "$unitTypeLower" does not match restriction "$restrictionLower"');
+            // Skip units that have already been used for an action on this card
+            if (usedUnitIds.contains(unit.id)) {
+              skippedBecauseUsed++;
+              print('  - SKIPPED: Already used');
               continue;
             }
-          }
 
-          // If hex_tiles restriction exists, only add units in allowed hexes
-          if (allowedHexes == null || allowedHexes.contains(unit.position)) {
-            playerUnitHexes.add(unit.position);
-            added++;
-            print('  - ADDED to highlights');
-          } else {
-            skippedBecauseHexTiles++;
-            print('  - SKIPPED: Not in allowed hex_tiles area');
+            // Check unit_restrictions filter (supports both String and List<String>)
+            bool passesUnitRestriction = true;
+            if (unitRestriction != null) {
+              if (unitRestriction is String) {
+                // Handle String format
+                if (unitRestriction.isNotEmpty && unitRestriction.toLowerCase() != 'all') {
+                  final restrictionLower = unitRestriction.toLowerCase();
+                  final unitTypeLower = unit.unitType.toLowerCase();
+                  if (!unitTypeLower.contains(restrictionLower)) {
+                    passesUnitRestriction = false;
+                  }
+                }
+              } else if (unitRestriction is List) {
+                // Handle List<String> format
+                final restrictionList = unitRestriction.cast<String>();
+                if (restrictionList.isNotEmpty) {
+                  final restrictionsLower = restrictionList.map((r) => r.toLowerCase()).toList();
+                  final unitTypeLower = unit.unitType.toLowerCase();
+                  // Check if unit type matches ANY restriction in the list
+                  if (!restrictionsLower.any((r) => r != 'all' && unitTypeLower.contains(r))) {
+                    passesUnitRestriction = false;
+                  }
+                }
+              }
+            }
+
+            if (!passesUnitRestriction) {
+              skippedBecauseUnitRestriction++;
+              print('  - SKIPPED: Unit type "${unit.unitType}" does not match restriction "$unitRestriction"');
+              continue;
+            }
+
+            // If hex_tiles restriction exists, only add units in allowed hexes
+            if (allowedHexes == null || allowedHexes.contains(unit.position)) {
+              playerUnitHexes.add(unit.position);
+              added++;
+              print('  - ADDED to highlights');
+            } else {
+              skippedBecauseHexTiles++;
+              print('  - SKIPPED: Not in allowed hex_tiles area');
+            }
           }
         }
-      }
 
-      print('DEBUG HIGHLIGHT SUMMARY:');
-      print('  - Total ${currentPlayer.name} units: $totalPlayerUnits');
-      print('  - Skipped (already used): $skippedBecauseUsed');
-      print('  - Skipped (unit restriction): $skippedBecauseUnitRestriction');
-      print('  - Skipped (hex_tiles): $skippedBecauseHexTiles');
-      print('  - Added to highlights: $added');
+        print('DEBUG HIGHLIGHT SUMMARY:');
+        print('  - Total ${currentPlayer.name} units: $totalPlayerUnits');
+        print('  - Skipped (already used): $skippedBecauseUsed');
+        print('  - Skipped (unit restriction): $skippedBecauseUnitRestriction');
+        print('  - Skipped (hex_tiles): $skippedBecauseHexTiles');
+        print('  - Added to highlights: $added');
+      }
 
       chexxState.highlightedHexes = playerUnitHexes;
       print('HIGHLIGHT: Set ${playerUnitHexes.length} hexes to highlight');
@@ -903,6 +991,49 @@ class _CardGameScreenState extends State<CardGameScreen> {
     }
 
     print('Action ${actionIndex} selected: ${action}');
+  }
+
+  void _handleBarrageAction(int actionIndex, dynamic action) {
+    if (_chexxGameEngine != null) {
+      final chexxState = _chexxGameEngine!.gameState as ChexxGameState;
+      chexxState.isCardActionActive = true;
+
+      print('Barrage action activated - highlighting all enemy units');
+
+      // Store barrage action metadata for combat system to use
+      chexxState.activeBarrageAction = action;
+
+      // Get the current player and enemy player
+      final currentPlayer = chexxState.currentPlayer;
+      final enemyPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
+
+      // Barrage doesn't require unit selection - skip that sub-step if it exists
+      final subSteps = action['sub_steps'] as List?;
+      if (subSteps != null) {
+        final unitSelectionIndex = subSteps.indexWhere((step) => step == 'unit_selection');
+        if (unitSelectionIndex != -1) {
+          print('Auto-completing unit_selection sub-step for barrage (not required)');
+          _advanceSubStep(actionIndex, 'unit_selection');
+        }
+      }
+
+      // Highlight ALL enemy units (no range restriction for barrage)
+      final enemyUnitHexes = chexxState.simpleUnits
+          .where((u) => u.owner == enemyPlayer)
+          .map((u) => u.position)
+          .toSet();
+
+      chexxState.highlightedHexes = enemyUnitHexes;
+      print('Highlighted ${enemyUnitHexes.length} enemy hexes for barrage attack');
+
+      // Set up combat callback for when enemy is clicked
+      chexxState.onCombatOccurred = () {
+        print('Barrage combat occurred - completing action');
+        _advanceSubStep(actionIndex, 'combat');
+      };
+
+      _chexxGameEngine!.notifyListeners();
+    }
   }
 
   void _advanceSubStep(int actionIndex, String subStepName) {

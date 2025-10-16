@@ -9,6 +9,9 @@
       "action_type": "order",
       "unit_restrictions": "artillery",
       "hex_tiles": "all",
+      "overrides": {
+        "move_only": 3
+      },
       "sub_steps": [
         "unit_selection",
         "before_combat_movement",

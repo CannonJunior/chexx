@@ -157,6 +157,9 @@ class ChexxGameState extends GameStateBase {
   // Card effect overrides - temporary attribute modifications from cards (cleared at end of turn)
   Map<String, Map<String, dynamic>> unitOverrides = {}; // unitId -> {attribute -> value}
 
+  // Barrage action: store active barrage action metadata for direct combat
+  Map<String, dynamic>? activeBarrageAction;
+
   @override
   void initializeGame() {
     gamePhase = GamePhase.playing;
@@ -227,6 +230,9 @@ class ChexxGameState extends GameStateBase {
 
   @override
   void endTurn() {
+    // Clear dice roll display
+    clearDiceRoll();
+
     // Clear card effect overrides for all units (effects last only one turn)
     if (unitOverrides.isNotEmpty) {
       print('DEBUG: Clearing ${unitOverrides.length} unit override(s) at end of turn');
@@ -1275,9 +1281,14 @@ class ChexxGameState extends GameStateBase {
     notifyListeners();
   }
 
-  /// Check if dice roll should still be displayed (5 seconds)
+  /// Check if dice roll should still be displayed (until END TURN is clicked)
   bool get shouldShowDiceRoll {
     if (lastCombatTime == null) return false;
+    // In card mode, dice rolls persist until END TURN is clicked
+    if (gameMode == 'card') {
+      return true;
+    }
+    // In other modes, show for 5 seconds
     return DateTime.now().difference(lastCombatTime!).inSeconds < 5;
   }
 
@@ -1376,10 +1387,23 @@ class ChexxGameState extends GameStateBase {
 
     // Get overrides from card action
     final overrides = cardAction['overrides'] as Map<String, dynamic>?;
+    final effectiveOverrides = <String, dynamic>{};
+
+    // Copy overrides if they exist
     if (overrides != null && overrides.isNotEmpty) {
-      // Store overrides for this unit
-      unitOverrides[unitId] = Map<String, dynamic>.from(overrides);
-      print('DEBUG APPLY: Applied card overrides to unit $unitId: $overrides');
+      effectiveOverrides.addAll(overrides);
+    }
+
+    // Check for battle_die modifier at action level (not in overrides)
+    if (cardAction.containsKey('battle_die')) {
+      effectiveOverrides['battle_die'] = cardAction['battle_die'];
+      print('DEBUG APPLY: Found battle_die modifier at action level: ${cardAction['battle_die']}');
+    }
+
+    // Store effective overrides for this unit
+    if (effectiveOverrides.isNotEmpty) {
+      unitOverrides[unitId] = effectiveOverrides;
+      print('DEBUG APPLY: Applied card overrides to unit $unitId: $effectiveOverrides');
     } else {
       print('DEBUG APPLY: No overrides found in card action - will use base unit stats');
     }
@@ -1395,15 +1419,41 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Get units that match a unit restriction filter
-  List<SimpleGameUnit> getUnitsMatchingRestriction(String? restriction, Player player) {
-    if (restriction == null || restriction.isEmpty || restriction.toLowerCase() == 'all') {
+  /// Supports both String and List<String> formats
+  List<SimpleGameUnit> getUnitsMatchingRestriction(dynamic restriction, Player player) {
+    // Handle null or "all" case
+    if (restriction == null) {
       return simpleUnits.where((u) => u.owner == player).toList();
     }
 
-    final restrictionLower = restriction.toLowerCase();
-    return simpleUnits.where((u) {
-      return u.owner == player && u.unitType.toLowerCase().contains(restrictionLower);
-    }).toList();
+    // Handle String format
+    if (restriction is String) {
+      if (restriction.isEmpty || restriction.toLowerCase() == 'all') {
+        return simpleUnits.where((u) => u.owner == player).toList();
+      }
+
+      final restrictionLower = restriction.toLowerCase();
+      return simpleUnits.where((u) {
+        return u.owner == player && u.unitType.toLowerCase().contains(restrictionLower);
+      }).toList();
+    }
+
+    // Handle List<String> format (e.g., ["infantry", "armor"])
+    if (restriction is List) {
+      final restrictionList = restriction.cast<String>();
+      if (restrictionList.isEmpty) {
+        return simpleUnits.where((u) => u.owner == player).toList();
+      }
+
+      final restrictionsLower = restrictionList.map((r) => r.toLowerCase()).toList();
+      return simpleUnits.where((u) {
+        return u.owner == player &&
+               restrictionsLower.any((r) => u.unitType.toLowerCase().contains(r));
+      }).toList();
+    }
+
+    // Fallback: return all units for player
+    return simpleUnits.where((u) => u.owner == player).toList();
   }
 
   /// Clear overrides for a specific unit
@@ -1416,6 +1466,7 @@ class ChexxGameState extends GameStateBase {
   }
 
   /// Get hexes for a specific third (loaded from scenario)
+  /// Also supports dynamic filters like "adjacent to enemy units" and "not adjacent"
   Set<core_hex.HexCoordinate> getHexesForThird(String hexTiles) {
     switch (hexTiles.toLowerCase()) {
       case 'left third':
@@ -1424,8 +1475,60 @@ class ChexxGameState extends GameStateBase {
         return middleThirdHexes;
       case 'right third':
         return rightThirdHexes;
+      case 'adjacent to enemy units':
+        return getHexesAdjacentToEnemyUnits();
+      case 'not adjacent':
+        return getHexesNotAdjacentToEnemyUnits();
       default:
         return {};
     }
+  }
+
+  /// Get all hexes that are adjacent to enemy units (for current player)
+  /// Returns all hexes that are adjacent to at least one enemy unit
+  Set<core_hex.HexCoordinate> getHexesAdjacentToEnemyUnits() {
+    final adjacentHexes = <core_hex.HexCoordinate>{};
+    final enemyPlayer = currentPlayer == Player.player1 ? Player.player2 : Player.player1;
+
+    print('DEBUG ADJACENT: Current player: ${currentPlayer.name}, Enemy player: ${enemyPlayer.name}');
+
+    // Find all enemy units
+    final enemyUnits = simpleUnits.where((u) => u.owner == enemyPlayer);
+    print('DEBUG ADJACENT: Found ${enemyUnits.length} enemy units');
+
+    // For each enemy unit, get all adjacent hexes
+    for (final enemy in enemyUnits) {
+      final neighbors = _getAdjacentHexes(enemy.position);
+      print('DEBUG ADJACENT: Enemy unit at ${enemy.position} has ${neighbors.length} neighbors');
+      adjacentHexes.addAll(neighbors);
+    }
+
+    print('DEBUG ADJACENT: Result: ${adjacentHexes.length} hexes adjacent to enemies');
+    return adjacentHexes;
+  }
+
+  /// Get all hexes with current player's units that are NOT adjacent to enemy units
+  Set<core_hex.HexCoordinate> getHexesNotAdjacentToEnemyUnits() {
+    final adjacentHexes = getHexesAdjacentToEnemyUnits();
+    final notAdjacentHexes = <core_hex.HexCoordinate>{};
+
+    print('DEBUG NOT ADJACENT: Current player: ${currentPlayer.name}');
+    print('DEBUG NOT ADJACENT: Total units: ${simpleUnits.length}');
+    print('DEBUG NOT ADJACENT: Adjacent hexes count: ${adjacentHexes.length}');
+
+    // Get all hexes with current player's units that are NOT adjacent to enemies
+    for (final unit in simpleUnits) {
+      if (unit.owner == currentPlayer) {
+        final isAdjacent = adjacentHexes.contains(unit.position);
+        print('DEBUG NOT ADJACENT: Unit ${unit.id} (${unit.unitType}) at ${unit.position} - adjacent: $isAdjacent');
+        if (!isAdjacent) {
+          notAdjacentHexes.add(unit.position);
+          print('  -> ADDED to not adjacent set');
+        }
+      }
+    }
+
+    print('DEBUG NOT ADJACENT: Result: ${notAdjacentHexes.length} hexes not adjacent to enemies');
+    return notAdjacentHexes;
   }
 }
