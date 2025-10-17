@@ -23,22 +23,26 @@ enum StructureType {
   sandbag,
   barbwire,
   dragonsTeeth,
+  medal,
 }
 
 /// Represents a structure template in the scenario builder
 class StructureTemplate {
   final StructureType type;
   final String id;
+  final Player? player; // Which player can control/earn VP from this structure
 
   const StructureTemplate({
     required this.type,
     required this.id,
+    this.player,
   });
 
   Map<String, dynamic> toJson() {
     return {
       'type': type.toString().split('.').last,
       'id': id,
+      if (player != null) 'player': player.toString().split('.').last,
     };
   }
 
@@ -46,6 +50,22 @@ class StructureTemplate {
     return StructureTemplate(
       type: StructureType.values.firstWhere((e) => e.toString().split('.').last == json['type']),
       id: json['id'] as String,
+      player: json['player'] != null
+          ? Player.values.firstWhere((e) => e.toString().split('.').last == json['player'])
+          : null,
+    );
+  }
+
+  /// Create a copy with modified fields
+  StructureTemplate copyWith({
+    StructureType? type,
+    String? id,
+    Player? player,
+  }) {
+    return StructureTemplate(
+      type: type ?? this.type,
+      id: id ?? this.id,
+      player: player ?? this.player,
     );
   }
 }
@@ -185,6 +205,11 @@ class ScenarioBuilderState extends ChangeNotifier {
   int player1WinPoints = 10;
   int player2WinPoints = 10;
 
+  // Game start settings
+  int player1InitialCards = 5; // Number of cards Player 1 starts with
+  int player2InitialCards = 5; // Number of cards Player 2 starts with
+  Player firstPlayer = Player.player1; // Which player goes first
+
   // New properties for enhanced editing
   HexCoordinate? lastEditedTile;
   HexCoordinate? cursorPosition;
@@ -274,6 +299,8 @@ class ScenarioBuilderState extends ChangeNotifier {
       const StructureTemplate(type: StructureType.sandbag, id: 'sandbag_structure'),
       const StructureTemplate(type: StructureType.barbwire, id: 'barbwire_structure'),
       const StructureTemplate(type: StructureType.dragonsTeeth, id: 'dragons_teeth_structure'),
+      const StructureTemplate(type: StructureType.medal, id: 'medal_p1', player: Player.player1),
+      const StructureTemplate(type: StructureType.medal, id: 'medal_p2', player: Player.player2),
     ]);
   }
 
@@ -1040,6 +1067,12 @@ class ScenarioBuilderState extends ChangeNotifier {
       'player2_points': player2WinPoints,
     };
 
+    baseConfig['game_start_settings'] = {
+      'player1_initial_cards': player1InitialCards,
+      'player2_initial_cards': player2InitialCards,
+      'first_player': firstPlayer.toString().split('.').last,
+    };
+
     // Save hex orientation (flat or pointy)
     baseConfig['hex_orientation'] = hexOrientation == HexOrientation.flat ? 'flat' : 'pointy';
     print('DEBUG: Saving hex orientation: ${baseConfig['hex_orientation']}');
@@ -1351,6 +1384,27 @@ class ScenarioBuilderState extends ChangeNotifier {
           print('Successfully loaded win conditions: P1=$player1WinPoints, P2=$player2WinPoints');
         } catch (e) {
           print('Error loading win conditions: $e');
+        }
+      }
+
+      // Load game start settings
+      if (scenarioData.containsKey('game_start_settings')) {
+        try {
+          final gameStartSettings = scenarioData['game_start_settings'] as Map<String, dynamic>;
+          // Support both old format (initial_card_count) and new format (player1/player2_initial_cards)
+          if (gameStartSettings.containsKey('initial_card_count')) {
+            final cardCount = gameStartSettings['initial_card_count'] as int? ?? 5;
+            player1InitialCards = cardCount;
+            player2InitialCards = cardCount;
+          } else {
+            player1InitialCards = gameStartSettings['player1_initial_cards'] as int? ?? 5;
+            player2InitialCards = gameStartSettings['player2_initial_cards'] as int? ?? 5;
+          }
+          final firstPlayerString = gameStartSettings['first_player'] as String? ?? 'player1';
+          firstPlayer = firstPlayerString == 'player1' ? Player.player1 : Player.player2;
+          print('Successfully loaded game start settings: P1Cards=$player1InitialCards, P2Cards=$player2InitialCards, First=$firstPlayerString');
+        } catch (e) {
+          print('Error loading game start settings: $e');
         }
       }
 

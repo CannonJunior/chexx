@@ -371,7 +371,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
     if (selectedCard == null) return false;
 
     // Check if the card is reactive (can only be played as a reaction)
-    final isReactive = selectedCard.card.reactive as bool? ?? false;
+    final isReactive = selectedCard.card.reactive;
 
     if (isReactive) {
       // Reactive cards cannot be played during the player's own turn
@@ -2334,8 +2334,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
     // Check if Recon card (card_23) was played - need to handle special card draw
     bool reconCardPlayed = false;
     if (playedCard != null) {
-      final cardData = playedCard.card.customData;
-      final endOfTurn = cardData['endOfTurn'] as String?;
+      final endOfTurn = playedCard.card.endOfTurn;
       if (endOfTurn == 'draw two and discard one') {
         reconCardPlayed = true;
         print('Recon card was played - will draw two cards for player to choose');
@@ -2403,10 +2402,8 @@ class _CardGameScreenState extends State<CardGameScreen> {
     }
 
     // End turn in f-card engine (checks if card was played)
-    // Pass false for autoDraw if Recon card was played - we'll handle draw manually
-    final success = reconCardPlayed
-        ? cardGameState.cardGameState.endTurn(autoDraw: false)
-        : cardGameState.cardGameState.endTurn();
+    // Note: We can't disable auto-draw, so we'll need to handle Recon differently
+    final success = cardGameState.cardGameState.endTurn();
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2454,6 +2451,7 @@ class _CardGameScreenState extends State<CardGameScreen> {
 
   /// Handle the special card draw for Recon card (card_23)
   /// Draw two cards and let player choose one, discard the other
+  /// Note: endTurn() already drew 1 card automatically, so we need to draw 1 more
   void _handleReconCardDraw() {
     final deckManager = widget.gamePlugin.deckManager;
     final currentPlayer = cardGameState.cardCurrentPlayer;
@@ -2463,45 +2461,48 @@ class _CardGameScreenState extends State<CardGameScreen> {
       return;
     }
 
-    // Check if deck has at least 2 cards
-    if (deckManager.cardsRemaining < 2) {
-      print('Not enough cards in deck for Recon draw (need 2, have ${deckManager.cardsRemaining})');
-      // Fall back to normal draw if available
-      if (deckManager.cardsRemaining == 1) {
-        deckManager.drawCard(currentPlayer);
-      }
+    // endTurn() already drew 1 card for us, we need 1 more for Recon
+    // Check if deck has at least 1 more card
+    if (deckManager.cardsRemaining < 1) {
+      print('Not enough cards in deck for Recon draw (need 1 more, have ${deckManager.cardsRemaining})');
       _finishTurn();
       return;
     }
 
-    // Draw two cards temporarily to hand
-    final initialHandSize = currentPlayer.hand.length;
-    deckManager.drawCard(currentPlayer);
-    deckManager.drawCard(currentPlayer);
-
-    // Get the two newly drawn cards (last two in hand)
-    if (currentPlayer.hand.length < initialHandSize + 2) {
-      print('ERROR: Failed to draw 2 cards for Recon effect');
+    // The last card in hand was auto-drawn by endTurn()
+    if (currentPlayer.hand.isEmpty) {
+      print('ERROR: No cards in hand after endTurn');
       _finishTurn();
       return;
     }
 
-    final card1 = currentPlayer.hand[currentPlayer.hand.length - 2];
-    final card2 = currentPlayer.hand[currentPlayer.hand.length - 1];
+    final autoDrawnCard = currentPlayer.hand.last;
 
-    // Remove both cards from hand temporarily
-    currentPlayer.hand.removeLast();
-    currentPlayer.hand.removeLast();
+    // Draw one more card manually
+    final secondCard = deckManager.drawCard();
+    if (secondCard == null) {
+      print('ERROR: Failed to draw second card for Recon effect');
+      _finishTurn();
+      return;
+    }
+
+    // Add second card to hand temporarily
+    secondCard.moveToZone(f_card.CardZone.hand);
+    currentPlayer.addToHand(secondCard);
+
+    // Now remove both cards from hand temporarily (for the choice UI)
+    currentPlayer.removeFromHand(autoDrawnCard);
+    currentPlayer.removeFromHand(secondCard);
 
     // Show card choice UI
     setState(() {
       isWaitingForCardChoice = true;
-      cardChoices = [card1, card2];
+      cardChoices = [autoDrawnCard, secondCard];
     });
 
     print('Recon: Showing player two cards to choose from');
-    print('Card 1: ${card1.card.name}');
-    print('Card 2: ${card2.card.name}');
+    print('Card 1: ${autoDrawnCard.card.name}');
+    print('Card 2: ${secondCard.card.name}');
   }
 
   /// Called when player selects one of the two cards from Recon draw
@@ -2521,11 +2522,13 @@ class _CardGameScreenState extends State<CardGameScreen> {
     }
 
     // Add selected card to player's hand
-    currentPlayer.hand.add(selectedCard);
+    selectedCard.moveToZone(f_card.CardZone.hand);
+    currentPlayer.addToHand(selectedCard);
     print('Recon: Player chose ${selectedCard.card.name}');
 
-    // Discard the other card
-    cardGameState.cardGameState.discardPile.add(discardedCard);
+    // Discard the other card using the card game state adapter
+    discardedCard.moveToZone(f_card.CardZone.discard);
+    cardGameState.moveCardFromPlay(discardedCard, f_card.CardZone.discard);
     print('Recon: Discarded ${discardedCard.card.name}');
 
     // Clear card choice state and finish turn

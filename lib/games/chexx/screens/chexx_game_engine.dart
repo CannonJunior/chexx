@@ -336,6 +336,9 @@ class ChexxGameEngine extends GameEngineBase {
                 chexxGameState.simpleUnits.remove(unitAtPosition);
                 print('${unitAtPosition.unitType} destroyed!');
 
+                // Update medal victory points after unit death
+                chexxGameState.updateMedalVictoryPoints();
+
                 // Award point to the attacking player (barrage awards to current player)
                 if (isBarrageAttack) {
                   chexxGameState.awardPoints(chexxGameState.currentPlayer, 1);
@@ -443,6 +446,8 @@ class ChexxGameEngine extends GameEngineBase {
                       if (finalHealth <= 0) {
                         chexxGameState.simpleUnits.removeAt(index);
                         print('${updatedUnit.unitType} destroyed by retreat damage (no valid hexes)!');
+                        // Update medal victory points after unit death from retreat
+                        chexxGameState.updateMedalVictoryPoints();
                       } else {
                         chexxGameState.simpleUnits[index] = finalUnit;
                         print('${updatedUnit.unitType} takes $retreatDamage retreat damage (no valid hexes)! Health: $finalHealth/${updatedUnit.maxHealth}');
@@ -541,6 +546,9 @@ class ChexxGameEngine extends GameEngineBase {
           print('${retreatingUnit.unitType} retreated to ${hexCoord.q},${hexCoord.r},${hexCoord.s}');
         }
 
+        // Update medal victory points after retreat movement
+        chexxGameState.updateMedalVictoryPoints();
+
         // Clear retreat state
         chexxGameState.clearRetreatState();
         notifyListeners();
@@ -617,6 +625,9 @@ class ChexxGameEngine extends GameEngineBase {
             chexxGameState.simpleUnits[index] = updatedUnit;
           }
           print('Moved unit to: $hexCoord (move-only: ${chexxGameState.lastMoveWasMoveOnly})');
+
+          // Update medal victory points after unit movement
+          chexxGameState.updateMedalVictoryPoints();
 
           // Clear targeted enemy and wayfinding highlights after moving
           chexxGameState.targetedEnemy = null;
@@ -1565,6 +1576,29 @@ class ChexxGamePainter extends CustomPainter {
           canvas.drawPath(path, fillPaint);
           canvas.drawPath(path, strokePaint);
           break;
+        case StructureType.medal:
+          // Draw medal as a star
+          final path = Path();
+          final outerRadius = structureSize * 0.4;
+          final innerRadius = structureSize * 0.2;
+          const numPoints = 5;
+
+          for (int i = 0; i < numPoints * 2; i++) {
+            final angle = (i * pi / numPoints) - (pi / 2);
+            final radius = i % 2 == 0 ? outerRadius : innerRadius;
+            final x = center.dx + radius * cos(angle);
+            final y = center.dy + radius * sin(angle);
+
+            if (i == 0) {
+              path.moveTo(x, y);
+            } else {
+              path.lineTo(x, y);
+            }
+          }
+          path.close();
+          canvas.drawPath(path, fillPaint);
+          canvas.drawPath(path, strokePaint);
+          break;
       }
 
       // Draw structure symbol (same as scenario builder)
@@ -1603,6 +1637,8 @@ class ChexxGamePainter extends CustomPainter {
         return 'W';
       case StructureType.dragonsTeeth:
         return 'T';
+      case StructureType.medal:
+        return 'M';
     }
   }
 
@@ -1710,6 +1746,8 @@ class ChexxGamePainter extends CustomPainter {
         return Colors.grey.shade700;
       case StructureType.dragonsTeeth:
         return Colors.grey.shade600;
+      case StructureType.medal:
+        return Colors.amber.shade600;
     }
   }
 

@@ -22,11 +22,13 @@ class GameStructure {
   final StructureType type;
   final core_hex.HexCoordinate position;
   final String id;
+  final Player? player; // Which player can earn victory points from this medal
 
   const GameStructure({
     required this.type,
     required this.position,
     required this.id,
+    this.player,
   });
 }
 
@@ -66,6 +68,11 @@ class ChexxGameState extends GameStateBase {
   int player2Points = 0;
   int player1WinPoints = 10;
   int player2WinPoints = 10;
+
+  // Victory point tracking for medals
+  int player1VictoryPoints = 0;
+  int player2VictoryPoints = 0;
+  Map<core_hex.HexCoordinate, Player> medalVictoryPoints = {}; // Track which medals are currently controlled
 
   // Hex orientation for rendering
   HexOrientation hexOrientation = HexOrientation.flat;
@@ -363,16 +370,32 @@ class ChexxGameState extends GameStateBase {
 
   @override
   void checkVictoryConditions() {
-    // Simple victory condition: eliminate all enemy units
-    final player1Units = getPlayerEntities(Player.player1);
-    final player2Units = getPlayerEntities(Player.player2);
+    // Check if there are any medals in the scenario
+    final hasMedals = placedStructures.any((s) => s.type == StructureType.medal && s.player != null);
 
-    if (player1Units.isEmpty) {
-      winner = Player.player2;
-      gamePhase = GamePhase.gameOver;
-    } else if (player2Units.isEmpty) {
-      winner = Player.player1;
-      gamePhase = GamePhase.gameOver;
+    if (hasMedals) {
+      // Medal-based victory: check victory points
+      if (player1VictoryPoints >= player1WinPoints) {
+        winner = Player.player1;
+        gamePhase = GamePhase.gameOver;
+        print('Player 1 wins with $player1VictoryPoints victory points!');
+      } else if (player2VictoryPoints >= player2WinPoints) {
+        winner = Player.player2;
+        gamePhase = GamePhase.gameOver;
+        print('Player 2 wins with $player2VictoryPoints victory points!');
+      }
+    } else {
+      // Simple victory condition: eliminate all enemy units
+      final player1Units = getPlayerEntities(Player.player1);
+      final player2Units = getPlayerEntities(Player.player2);
+
+      if (player1Units.isEmpty) {
+        winner = Player.player2;
+        gamePhase = GamePhase.gameOver;
+      } else if (player2Units.isEmpty) {
+        winner = Player.player1;
+        gamePhase = GamePhase.gameOver;
+      }
     }
   }
 
@@ -593,10 +616,18 @@ class ChexxGameState extends GameStateBase {
           position['s'] as int,
         );
 
+        // Parse player field if present (for medals)
+        Player? structurePlayer;
+        if (template.containsKey('player')) {
+          final playerString = template['player'] as String;
+          structurePlayer = playerString == 'player1' ? Player.player1 : Player.player2;
+        }
+
         placedStructures.add(GameStructure(
           type: structureType,
           position: structurePosition,
           id: template['id'] as String,
+          player: structurePlayer,
         ));
       } catch (e) {
         print('Error loading structure: $e');
@@ -1122,14 +1153,14 @@ class ChexxGameState extends GameStateBase {
   int _getUnitHealth(String unitType) {
     final health = switch (unitType) {
       // CHEXX unit types
-      'minor' => 1,
+      'minor' => 2,
       'scout' => 2,
       'knight' => 3,
       'guardian' => 3,
       // WWII unit types
-      'infantry' => 1,
-      'armor' => 1,
-      'artillery' => 1,
+      'infantry' => 4,
+      'armor' => 3,
+      'artillery' => 2,
       _ => 1,
     };
     print('Unit type: "$unitType" -> health: $health');
@@ -1633,5 +1664,75 @@ class ChexxGameState extends GameStateBase {
     // 4. Use Bresenham's line algorithm to check all hexes in the path
 
     return true;
+  }
+
+  /// Update victory points for medal structures
+  /// Called after unit movement, combat, and unit death
+  void updateMedalVictoryPoints() {
+    // Store previous state for comparison
+    final previousMedalControl = Map<core_hex.HexCoordinate, Player>.from(medalVictoryPoints);
+
+    // Clear current medal control
+    medalVictoryPoints.clear();
+
+    // Iterate through all placed structures to find medals
+    for (final structure in placedStructures) {
+      // Only process medal structures
+      if (structure.type != StructureType.medal) continue;
+
+      // Only process medals that have a player assignment
+      if (structure.player == null) continue;
+
+      // Check if there's a unit at this position
+      SimpleGameUnit? unitAtPosition;
+      for (final unit in simpleUnits) {
+        if (unit.position.q == structure.position.q &&
+            unit.position.r == structure.position.r &&
+            unit.position.s == structure.position.s) {
+          unitAtPosition = unit;
+          break;
+        }
+      }
+
+      // If a unit occupies this medal and the unit's owner matches the medal's player
+      if (unitAtPosition != null && unitAtPosition.owner == structure.player) {
+        medalVictoryPoints[structure.position] = unitAtPosition.owner;
+      }
+    }
+
+    // Calculate victory point changes
+    // Check for newly controlled medals
+    for (final entry in medalVictoryPoints.entries) {
+      final position = entry.key;
+      final controllingPlayer = entry.value;
+
+      if (!previousMedalControl.containsKey(position)) {
+        // Newly controlled medal - award 1 victory point
+        if (controllingPlayer == Player.player1) {
+          player1VictoryPoints++;
+          print('Player 1 gained control of medal at $position (VP: $player1VictoryPoints)');
+        } else {
+          player2VictoryPoints++;
+          print('Player 2 gained control of medal at $position (VP: $player2VictoryPoints)');
+        }
+      }
+    }
+
+    // Check for lost medals
+    for (final entry in previousMedalControl.entries) {
+      final position = entry.key;
+      final previousPlayer = entry.value;
+
+      if (!medalVictoryPoints.containsKey(position)) {
+        // Lost control of medal - remove 1 victory point
+        if (previousPlayer == Player.player1) {
+          player1VictoryPoints--;
+          print('Player 1 lost control of medal at $position (VP: $player1VictoryPoints)');
+        } else {
+          player2VictoryPoints--;
+          print('Player 2 lost control of medal at $position (VP: $player2VictoryPoints)');
+        }
+      }
+    }
   }
 }

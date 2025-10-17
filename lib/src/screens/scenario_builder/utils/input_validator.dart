@@ -81,25 +81,24 @@ class InputValidator {
     }
 
     // Validate required fields
-    final requiredFields = ['name', 'board_config', 'placed_units'];
-    for (final field in requiredFields) {
-      if (!data.containsKey(field)) {
-        return ValidationResult(
-          isValid: false,
-          error: 'Missing required field: $field',
-        );
-      }
+    // Accept both 'name' and 'scenario_name' for compatibility
+    if (!data.containsKey('name') && !data.containsKey('scenario_name')) {
+      return ValidationResult(
+        isValid: false,
+        error: 'Missing required field: name',
+      );
     }
 
     // Validate scenario name
-    if (data['name'] is! String) {
+    final scenarioNameValue = data['scenario_name'] ?? data['name'];
+    if (scenarioNameValue is! String) {
       return ValidationResult(
         isValid: false,
         error: 'Scenario name must be a string',
       );
     }
 
-    final sanitizedName = sanitizeScenarioName(data['name'] as String);
+    final sanitizedName = sanitizeScenarioName(scenarioNameValue as String);
     if (sanitizedName == null) {
       return ValidationResult(
         isValid: false,
@@ -107,25 +106,40 @@ class InputValidator {
       );
     }
 
-    // Validate board_config structure
-    if (data['board_config'] is! Map) {
+    // Validate board_config or board structure (accept both for compatibility)
+    if (!data.containsKey('board_config') && !data.containsKey('board')) {
+      return ValidationResult(
+        isValid: false,
+        error: 'Missing required field: board_config',
+      );
+    }
+
+    final boardConfig = data['board_config'] ?? data['board'];
+    if (boardConfig is! Map) {
       return ValidationResult(
         isValid: false,
         error: 'board_config must be an object',
       );
     }
 
-    // Validate placed_units is a list
-    if (data['placed_units'] is! List) {
+    // Validate placed_units or unit_placements is a list (accept both for compatibility)
+    if (!data.containsKey('placed_units') && !data.containsKey('unit_placements')) {
       return ValidationResult(
         isValid: false,
-        error: 'placed_units must be an array',
+        error: 'Missing required field: unit_placements',
+      );
+    }
+
+    final placedUnitsData = data['placed_units'] ?? data['unit_placements'];
+    if (placedUnitsData is! List) {
+      return ValidationResult(
+        isValid: false,
+        error: 'unit_placements must be an array',
       );
     }
 
     // Limit number of units (prevent DoS)
-    final placedUnits = data['placed_units'] as List;
-    if (placedUnits.length > 1000) {
+    if (placedUnitsData.length > 1000) {
       return ValidationResult(
         isValid: false,
         error: 'Too many units: maximum 1000 units allowed',

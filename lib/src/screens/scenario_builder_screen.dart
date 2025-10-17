@@ -537,8 +537,8 @@ class ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
 
   Widget _buildStructureTypeButton(StructureTemplate structure) {
     final isSelected = builderState.selectedStructureTemplate == structure;
-    final color = TileStructureHelpers.getStructureTypeColor(structure.type);
-    final name = TileStructureHelpers.getStructureTypeName(structure.type);
+    final color = TileStructureHelpers.getStructureTypeColor(structure);
+    final name = TileStructureHelpers.getStructureTypeName(structure);
 
     return GestureDetector(
       onTap: () => builderState.selectStructureTemplate(structure),
@@ -557,7 +557,7 @@ class ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              TileStructureHelpers.getStructureTypeIcon(structure.type),
+              TileStructureHelpers.getStructureTypeIcon(structure),
               color: Colors.white,
               size: 20,
             ),
@@ -936,6 +936,141 @@ class ScenarioBuilderScreenState extends State<ScenarioBuilderScreen> {
                                     ),
                                   ],
                                 ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Game Start Settings Section
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade900.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Game Start Settings',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Initial Card Counts
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Player 1 Cards:',
+                                      style: TextStyle(color: Colors.white70, fontSize: 10),
+                                    ),
+                                    DropdownButton<int>(
+                                      value: builderState.player1InitialCards,
+                                      isExpanded: true,
+                                      dropdownColor: Colors.grey.shade800,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      items: List.generate(10, (index) => index + 1)
+                                          .map((count) => DropdownMenuItem<int>(
+                                                value: count,
+                                                child: Text('$count'),
+                                              ))
+                                          .toList(),
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          builderState.player1InitialCards = value;
+                                          builderState.notifyListeners();
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Player 2 Cards:',
+                                      style: TextStyle(color: Colors.white70, fontSize: 10),
+                                    ),
+                                    DropdownButton<int>(
+                                      value: builderState.player2InitialCards,
+                                      isExpanded: true,
+                                      dropdownColor: Colors.grey.shade800,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      items: List.generate(10, (index) => index + 1)
+                                          .map((count) => DropdownMenuItem<int>(
+                                                value: count,
+                                                child: Text('$count'),
+                                              ))
+                                          .toList(),
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          builderState.player2InitialCards = value;
+                                          builderState.notifyListeners();
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // First Player Selection
+                          const Text(
+                            'First Player:',
+                            style: TextStyle(color: Colors.white70, fontSize: 10),
+                          ),
+                          const SizedBox(height: 4),
+                          Column(
+                            children: [
+                              RadioListTile<Player>(
+                                title: const Text(
+                                  'Player 1 (Blue)',
+                                  style: TextStyle(color: Colors.white, fontSize: 11),
+                                ),
+                                value: Player.player1,
+                                groupValue: builderState.firstPlayer,
+                                activeColor: Colors.blue.shade300,
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    builderState.firstPlayer = value;
+                                    builderState.notifyListeners();
+                                  }
+                                },
+                              ),
+                              RadioListTile<Player>(
+                                title: const Text(
+                                  'Player 2 (Red)',
+                                  style: TextStyle(color: Colors.white, fontSize: 11),
+                                ),
+                                value: Player.player2,
+                                groupValue: builderState.firstPlayer,
+                                activeColor: Colors.red.shade300,
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    builderState.firstPlayer = value;
+                                    builderState.notifyListeners();
+                                  }
+                                },
                               ),
                             ],
                           ),

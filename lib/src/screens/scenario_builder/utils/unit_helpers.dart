@@ -365,51 +365,129 @@ class TileStructureHelpers {
     }
   }
 
-  /// Get icon for structure type
-  static IconData getStructureTypeIcon(StructureType structureType) {
-    switch (structureType) {
-      case StructureType.bunker:
-        return Icons.security; // Shield icon for bunker
-      case StructureType.bridge:
-        return Icons.horizontal_rule; // Horizontal line for bridge
-      case StructureType.sandbag:
-        return Icons.fence; // Fence icon for sandbags
-      case StructureType.barbwire:
-        return Icons.grain; // Wire-like icon for barbwire
-      case StructureType.dragonsTeeth:
-        return Icons.change_history; // Triangle icon for dragon's teeth
+  /// Get icon for structure (overload that accepts StructureTemplate)
+  static IconData getStructureTypeIcon(dynamic structure) {
+    if (structure is StructureTemplate) {
+      // Handle StructureTemplate with player field
+      switch (structure.type) {
+        case StructureType.bunker:
+          return Icons.security; // Shield icon for bunker
+        case StructureType.bridge:
+          return Icons.horizontal_rule; // Horizontal line for bridge
+        case StructureType.sandbag:
+          return Icons.fence; // Fence icon for sandbags
+        case StructureType.barbwire:
+          return Icons.grain; // Wire-like icon for barbwire
+        case StructureType.dragonsTeeth:
+          return Icons.change_history; // Triangle icon for dragon's teeth
+        case StructureType.medal:
+          return Icons.military_tech; // Medal icon
+      }
+    } else if (structure is StructureType) {
+      // Handle StructureType enum directly (legacy support)
+      switch (structure) {
+        case StructureType.bunker:
+          return Icons.security;
+        case StructureType.bridge:
+          return Icons.horizontal_rule;
+        case StructureType.sandbag:
+          return Icons.fence;
+        case StructureType.barbwire:
+          return Icons.grain;
+        case StructureType.dragonsTeeth:
+          return Icons.change_history;
+        case StructureType.medal:
+          return Icons.military_tech;
+      }
     }
+    return Icons.help_outline; // Fallback icon
   }
 
-  /// Get color for structure type
-  static Color getStructureTypeColor(StructureType structureType) {
-    switch (structureType) {
-      case StructureType.bunker:
-        return Colors.brown.shade600; // Brown for bunker
-      case StructureType.bridge:
-        return Colors.grey.shade400; // Grey for bridge
-      case StructureType.sandbag:
-        return Colors.brown.shade300; // Light brown for sandbags
-      case StructureType.barbwire:
-        return Colors.grey.shade700; // Dark grey for barbwire
-      case StructureType.dragonsTeeth:
-        return Colors.grey.shade600; // Medium grey for dragon's teeth
+  /// Get color for structure (overload that accepts StructureTemplate)
+  static Color getStructureTypeColor(dynamic structure) {
+    if (structure is StructureTemplate) {
+      // Handle StructureTemplate with player field
+      switch (structure.type) {
+        case StructureType.bunker:
+          return Colors.brown.shade600; // Brown for bunker
+        case StructureType.bridge:
+          return Colors.grey.shade400; // Grey for bridge
+        case StructureType.sandbag:
+          return Colors.brown.shade300; // Light brown for sandbags
+        case StructureType.barbwire:
+          return Colors.grey.shade700; // Dark grey for barbwire
+        case StructureType.dragonsTeeth:
+          return Colors.grey.shade600; // Medium grey for dragon's teeth
+        case StructureType.medal:
+          // Return player-specific color for medals
+          if (structure.player == Player.player1) {
+            return Colors.blue.shade600; // Blue for Player 1
+          } else if (structure.player == Player.player2) {
+            return Colors.red.shade600; // Red for Player 2
+          }
+          return Colors.amber.shade600; // Gold for neutral/unowned medals
+      }
+    } else if (structure is StructureType) {
+      // Handle StructureType enum directly (legacy support)
+      switch (structure) {
+        case StructureType.bunker:
+          return Colors.brown.shade600;
+        case StructureType.bridge:
+          return Colors.grey.shade400;
+        case StructureType.sandbag:
+          return Colors.brown.shade300;
+        case StructureType.barbwire:
+          return Colors.grey.shade700;
+        case StructureType.dragonsTeeth:
+          return Colors.grey.shade600;
+        case StructureType.medal:
+          return Colors.amber.shade600; // Default gold for medals
+      }
     }
+    return Colors.grey; // Fallback color
   }
 
-  /// Get name for structure type
-  static String getStructureTypeName(StructureType structureType) {
-    switch (structureType) {
-      case StructureType.bunker:
-        return 'Bunker';
-      case StructureType.bridge:
-        return 'Bridge';
-      case StructureType.sandbag:
-        return 'Sandbag';
-      case StructureType.barbwire:
-        return 'Barbwire';
-      case StructureType.dragonsTeeth:
-        return 'Dragon\'s Teeth';
+  /// Get name for structure (overload that accepts StructureTemplate)
+  static String getStructureTypeName(dynamic structure) {
+    if (structure is StructureTemplate) {
+      // Handle StructureTemplate with player field
+      switch (structure.type) {
+        case StructureType.bunker:
+          return 'Bunker';
+        case StructureType.bridge:
+          return 'Bridge';
+        case StructureType.sandbag:
+          return 'Sandbag';
+        case StructureType.barbwire:
+          return 'Barbwire';
+        case StructureType.dragonsTeeth:
+          return 'Dragon\'s Teeth';
+        case StructureType.medal:
+          // Return player-specific name for medals
+          if (structure.player == Player.player1) {
+            return 'Medal P1';
+          } else if (structure.player == Player.player2) {
+            return 'Medal P2';
+          }
+          return 'Medal'; // Neutral medal
+      }
+    } else if (structure is StructureType) {
+      // Handle StructureType enum directly (legacy support)
+      switch (structure) {
+        case StructureType.bunker:
+          return 'Bunker';
+        case StructureType.bridge:
+          return 'Bridge';
+        case StructureType.sandbag:
+          return 'Sandbag';
+        case StructureType.barbwire:
+          return 'Barbwire';
+        case StructureType.dragonsTeeth:
+          return 'Dragon\'s Teeth';
+        case StructureType.medal:
+          return 'Medal';
+      }
     }
+    return 'Unknown'; // Fallback name
   }
 }

@@ -216,6 +216,31 @@ class ScenarioBuilderPainter extends CustomPainter {
           canvas.drawPath(path, fillPaint);
           canvas.drawPath(path, strokePaint);
           break;
+        case StructureType.medal:
+          // Draw medal as a 5-pointed star
+          final path = Path();
+          final outerRadius = size * 0.5;
+          final innerRadius = size * 0.2;
+          for (int i = 0; i < 5; i++) {
+            final outerAngle = (i * 2 * pi / 5) - (pi / 2);
+            final innerAngle = ((i * 2 * pi / 5) + (pi / 5)) - (pi / 2);
+
+            final outerX = center.dx + outerRadius * cos(outerAngle);
+            final outerY = center.dy + outerRadius * sin(outerAngle);
+            final innerX = center.dx + innerRadius * cos(innerAngle);
+            final innerY = center.dy + innerRadius * sin(innerAngle);
+
+            if (i == 0) {
+              path.moveTo(outerX, outerY);
+            } else {
+              path.lineTo(outerX, outerY);
+            }
+            path.lineTo(innerX, innerY);
+          }
+          path.close();
+          canvas.drawPath(path, fillPaint);
+          canvas.drawPath(path, strokePaint);
+          break;
       }
 
       // Draw structure symbol
@@ -495,6 +520,8 @@ class ScenarioBuilderPainter extends CustomPainter {
         return Colors.grey.shade700;
       case StructureType.dragonsTeeth:
         return Colors.grey.shade600;
+      case StructureType.medal:
+        return Colors.amber.shade600;
     }
   }
 
@@ -510,6 +537,8 @@ class ScenarioBuilderPainter extends CustomPainter {
         return 'W';
       case StructureType.dragonsTeeth:
         return 'T';
+      case StructureType.medal:
+        return 'M';
     }
   }
 
